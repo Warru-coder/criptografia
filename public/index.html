@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecureCrypt — Secure File Encryption</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>SecureCrypt</h1>
+      <p class="subtitle">AES-256-GCM Encrypted File Protection</p>
+    </header>
+
+    <div id="setupPanel" class="panel hidden">
+      <h2>Initialize Vault</h2>
+      <p>Create a master password to secure your files.</p>
+      <form id="setupForm">
+        <div class="form-group">
+          <label for="setupPassword">Master Password</label>
+          <input type="password" id="setupPassword" required minlength="8" placeholder="Min 8 characters">
+        </div>
+        <div class="form-group">
+          <label for="setupConfirm">Confirm Password</label>
+          <input type="password" id="setupConfirm" required placeholder="Confirm password">
+        </div>
+        <div id="passwordStrength" class="strength-indicator"></div>
+        <button type="submit" class="btn btn-primary">Create Vault</button>
+      </form>
+    </div>
+
+    <div id="loginPanel" class="panel hidden">
+      <h2>Unlock Vault</h2>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="loginPassword">Master Password</label>
+          <input type="password" id="loginPassword" required placeholder="Enter master password">
+        </div>
+        <button type="submit" class="btn btn-primary">Unlock</button>
+      </form>
+    </div>
+
+    <div id="mainPanel" class="panel hidden">
+      <div class="toolbar">
+        <span id="statusIndicator" class="status">Unlocked</span>
+        <button id="logoutBtn" class="btn btn-secondary">Lock</button>
+      </div>
+
+      <div id="dropZone" class="drop-zone">
+        <div class="drop-content">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <p>Drag & drop files here or click to select</p>
+          <input type="file" id="fileInput" multiple hidden>
+        </div>
+      </div>
+
+      <div id="fileList" class="file-list"></div>
+
+      <div id="progressContainer" class="progress-container hidden">
+        <div class="progress-bar">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+        <span id="progressText" class="progress-text">0%</span>
+      </div>
+
+      <div id="logContainer" class="log-container">
+        <h3>Activity Log</h3>
+        <div id="logEntries"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
