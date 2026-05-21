@@ -11,6 +11,9 @@ const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
 const progressLabel = document.getElementById('progressLabel');
 const progressDetail = document.getElementById('progressDetail');
+const speedMeter = document.getElementById('speedMeter');
+const speedValue = document.getElementById('speedValue');
+const elapsedTime = document.getElementById('elapsedTime');
 const logEntries = document.getElementById('logEntries');
 const logoutBtn = document.getElementById('logoutBtn');
 const showDirBtn = document.getElementById('showDirBtn');
@@ -25,6 +28,60 @@ const dirOutput = document.getElementById('dirOutput');
 let masterPassword = '';
 let eventSource = null;
 let dirModeActive = false;
+let startTime = null;
+let totalBytesProcessed = 0;
+
+// Matrix Rain Background
+const canvas = document.getElementById('matrixCanvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*()_+-=[]{}|;:,.<>?/~`SCRYPT';
+const fontSize = 14;
+let columns = Math.floor(canvas.width / fontSize);
+let drops = Array(columns).fill(1);
+
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#00ff41';
+  ctx.font = fontSize + 'px monospace';
+
+  for (let i = 0; i < drops.length; i++) {
+    const text = chars[Math.floor(Math.random() * chars.length)];
+    const x = i * fontSize;
+    const y = drops[i] * fontSize;
+
+    if (Math.random() > 0.98) {
+      ctx.fillStyle = '#ffffff';
+    } else if (Math.random() > 0.9) {
+      ctx.fillStyle = '#00cc33';
+    } else {
+      ctx.fillStyle = `rgba(0, ${150 + Math.floor(Math.random() * 105)}, ${Math.floor(Math.random() * 65)}, ${0.3 + Math.random() * 0.7})`;
+    }
+
+    ctx.fillText(text, x, y);
+
+    if (y > canvas.height && Math.random() > 0.975) {
+      drops[i] = 0;
+    }
+    drops[i]++;
+  }
+}
+
+setInterval(drawMatrix, 50);
+
+window.addEventListener('resize', () => {
+  columns = Math.floor(canvas.width / fontSize);
+  drops = Array(columns).fill(1);
+});
 
 async function checkVaultStatus() {
   try {
@@ -48,7 +105,7 @@ setupForm.addEventListener('submit', async (e) => {
   const confirm = document.getElementById('setupConfirm').value;
 
   if (password !== confirm) {
-    addLog('Passwords do not match', 'error');
+    addLog('ERROR: Passwords do not match', 'error');
     return;
   }
 
@@ -62,15 +119,15 @@ setupForm.addEventListener('submit', async (e) => {
     const data = await res.json();
 
     if (res.ok) {
-      addLog('Vault created successfully', 'success');
+      addLog('Vault initialized successfully', 'success');
       masterPassword = password;
       setupPanel.classList.add('hidden');
       mainPanel.classList.remove('hidden');
     } else {
-      addLog(data.errors ? data.errors.join(', ') : data.error, 'error');
+      addLog(`ERROR: ${data.errors ? data.errors.join(', ') : data.error}`, 'error');
     }
   } catch (error) {
-    addLog(`Setup failed: ${error.message}`, 'error');
+    addLog(`ERROR: Setup failed - ${error.message}`, 'error');
   }
 });
 
@@ -90,13 +147,13 @@ loginForm.addEventListener('submit', async (e) => {
       masterPassword = password;
       loginPanel.classList.add('hidden');
       mainPanel.classList.remove('hidden');
-      addLog('Vault unlocked', 'success');
+      addLog('Vault unlocked — access granted', 'success');
       connectSSE();
     } else {
-      addLog('Invalid password', 'error');
+      addLog('ERROR: Access denied — invalid password', 'error');
     }
   } catch (error) {
-    addLog(`Login failed: ${error.message}`, 'error');
+    addLog(`ERROR: Connection failed - ${error.message}`, 'error');
   }
 });
 
@@ -108,7 +165,7 @@ logoutBtn.addEventListener('click', () => {
     eventSource.close();
     eventSource = null;
   }
-  addLog('Vault locked', 'info');
+  addLog('Vault locked — session terminated', 'info');
 });
 
 showDirBtn.addEventListener('click', () => {
@@ -120,6 +177,7 @@ showDirBtn.addEventListener('click', () => {
 
 clearLogBtn.addEventListener('click', () => {
   logEntries.innerHTML = '';
+  addLog('Log cleared', 'info');
 });
 
 dropZone.addEventListener('click', () => fileInput.click());
@@ -195,10 +253,14 @@ async function processFile(item, action) {
   btn.disabled = true;
   btn.textContent = 'Processing...';
   progressContainer.classList.remove('hidden');
+  speedMeter.classList.remove('hidden');
   progressFill.style.width = '0%';
   progressText.textContent = '0%';
-  progressLabel.textContent = action === 'encrypt' ? 'Encrypting...' : 'Decrypting...';
+  progressLabel.textContent = action === 'encrypt' ? '[ENCRYPTING]' : '[DECRYPTING]';
   progressDetail.textContent = file.name;
+
+  startTime = Date.now();
+  totalBytesProcessed = 0;
 
   const formData = new FormData();
   formData.append('file', file);
@@ -229,19 +291,21 @@ async function processFile(item, action) {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       progressFill.style.width = '100%';
       progressText.textContent = '100%';
-      addLog(`${action === 'encrypt' ? 'Encrypted' : 'Decrypted'}: ${file.name} → ${downloadName}`, 'success');
+      addLog(`${action === 'encrypt' ? 'ENCRYPTED' : 'DECRYPTED'}: ${file.name} → ${downloadName} [${duration}s]`, 'success');
     } else {
       const data = await res.json();
-      addLog(`${action} failed: ${data.error}`, 'error');
+      addLog(`ERROR: ${action} failed - ${data.error}`, 'error');
     }
   } catch (error) {
-    addLog(`${action} failed: ${error.message}`, 'error');
+    addLog(`ERROR: ${action} failed - ${error.message}`, 'error');
   }
 
   btn.disabled = false;
   btn.textContent = action === 'encrypt' ? 'Encrypt' : 'Decrypt';
+  speedMeter.classList.add('hidden');
 }
 
 async function processDirectory(action) {
@@ -249,7 +313,7 @@ async function processDirectory(action) {
   const outputPath = dirOutput.value.trim() || undefined;
 
   if (!inputPath) {
-    addLog('Please enter a directory path', 'error');
+    addLog('ERROR: Please enter a directory path', 'error');
     return;
   }
 
@@ -257,10 +321,13 @@ async function processDirectory(action) {
   btn.disabled = true;
   btn.textContent = 'Processing...';
   progressContainer.classList.remove('hidden');
+  speedMeter.classList.remove('hidden');
   progressFill.style.width = '0%';
   progressText.textContent = '0%';
-  progressLabel.textContent = action === 'encrypt' ? 'Encrypting directory...' : 'Decrypting directory...';
+  progressLabel.textContent = action === 'encrypt' ? '[ENCRYPTING DIR]' : '[DECRYPTING DIR]';
   progressDetail.textContent = inputPath;
+
+  startTime = Date.now();
 
   try {
     const res = await fetch(`/api/${action}-dir`, {
@@ -276,23 +343,25 @@ async function processDirectory(action) {
     const data = await res.json();
 
     if (res.ok) {
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       progressFill.style.width = '100%';
       progressText.textContent = '100%';
-      progressDetail.textContent = `Output: ${data.result.outputDir} | Files: ${data.result.processedFiles}`;
-      addLog(`${action === 'encrypt' ? 'Encrypted' : 'Decrypted'} directory: ${inputPath} (${data.result.processedFiles} files)`, 'success');
+      progressDetail.textContent = `Output: ${data.result.outputDir} | Files: ${data.result.processedFiles} [${duration}s]`;
+      addLog(`${action === 'encrypt' ? 'ENCRYPTED' : 'DECRYPTED'} directory: ${inputPath} (${data.result.processedFiles} files) [${duration}s]`, 'success');
 
       if (data.result.failedFiles > 0) {
-        addLog(`Failed files: ${data.result.failedFiles}`, 'error');
+        addLog(`WARNING: ${data.result.failedFiles} files failed`, 'error');
       }
     } else {
-      addLog(`Directory ${action} failed: ${data.error}`, 'error');
+      addLog(`ERROR: Directory ${action} failed - ${data.error}`, 'error');
     }
   } catch (error) {
-    addLog(`Directory ${action} failed: ${error.message}`, 'error');
+    addLog(`ERROR: Directory ${action} failed - ${error.message}`, 'error');
   }
 
   btn.disabled = false;
   btn.textContent = action === 'encrypt' ? 'Encrypt Directory' : 'Decrypt Directory';
+  speedMeter.classList.add('hidden');
 }
 
 encryptDirBtn.addEventListener('click', () => processDirectory('encrypt'));
@@ -315,11 +384,22 @@ function connectSSE() {
       }
 
       if (data.currentFilename) {
-        progressDetail.textContent = `${data.currentFile}/${data.totalFiles}: ${data.currentFilename}`;
+        progressDetail.textContent = `[${data.currentFile}/${data.totalFiles}] ${data.currentFilename}`;
+      }
+
+      if (data.bytesProcessed !== undefined && startTime) {
+        totalBytesProcessed = data.bytesProcessed;
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = totalBytesProcessed / (1024 * 1024) / elapsed;
+        speedValue.textContent = speed.toFixed(2) + ' MB/s';
+
+        const mins = Math.floor(elapsed / 60);
+        const secs = Math.floor(elapsed % 60);
+        elapsedTime.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
       }
 
       if (data.type === 'encrypt' || data.type === 'decrypt') {
-        progressLabel.textContent = data.type === 'encrypt' ? 'Encrypting...' : 'Decrypting...';
+        progressLabel.textContent = data.type === 'encrypt' ? '[ENCRYPTING]' : '[DECRYPTING]';
       }
     } catch {
       // ignore parse errors
@@ -334,7 +414,7 @@ function connectSSE() {
 function addLog(message, type = 'info') {
   const entry = document.createElement('div');
   entry.className = `log-entry ${type}`;
-  const timestamp = new Date().toLocaleTimeString();
+  const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
   entry.textContent = `[${timestamp}] ${message}`;
   logEntries.prepend(entry);
 

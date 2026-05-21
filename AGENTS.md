@@ -69,3 +69,41 @@ Encrypted files use `.scrypt` extension (e.g., `document.pdf.scrypt`)
 - `vault/master.hash` — Argon2id hash of master password
 - `metadata/` — Per-file encryption metadata
 - `logs/secure.log` — Activity logs (no sensitive data)
+
+## AI Agents
+
+### security-supervisor (`.opencode/agent/security-supervisor.md`)
+- **Role**: Security auditor and code reviewer
+- **Permissions**: read-only (no edit/bash)
+- **Responsibilities**:
+  - Audit all cryptographic code against best practices
+  - Detect security vulnerabilities before production
+  - Find bugs in stream handling, memory management, input validation
+  - Generate structured audit reports
+  - Block releases with critical issues
+- **Triggers**: Before releases, on code review requests, security audits
+
+### lead-developer (`.opencode/agent/lead-developer.md`)
+- **Role**: Primary code implementation agent
+- **Permissions**: full (edit/bash/read)
+- **Responsibilities**:
+  - Implement features and fix bugs
+  - Write tests for all new code
+  - Maintain code conventions (CamelCase, strict TypeScript)
+  - Document changes in `docs/CHANGELOG.md`
+  - Submit work for security-supervisor review
+- **Workflow**: Plan → Implement → Test → Build → Document → Submit for review
+
+### Agent Interaction Flow
+```
+lead-developer implements feature
+    ↓
+lead-developer writes tests + updates CHANGELOG
+    ↓
+lead-developer runs build + test + lint
+    ↓
+security-supervisor reviews changes
+    ↓
+If PASS → merge
+If FAIL → lead-developer fixes → re-review
+```

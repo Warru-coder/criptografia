@@ -7,43 +7,68 @@
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
+  <canvas id="matrixCanvas"></canvas>
+  <div class="scanline"></div>
+  <div class="vignette"></div>
+
   <div class="container">
     <header>
-      <h1>SecureCrypt</h1>
+      <h1 class="glitch" data-text="SecureCrypt">SecureCrypt</h1>
       <p class="subtitle">AES-256-GCM Encrypted File Protection</p>
+      <div class="terminal-badge">
+        <span class="badge-dot"></span>
+        <span class="badge-text">SYSTEM ACTIVE</span>
+      </div>
     </header>
 
     <div id="setupPanel" class="panel hidden">
-      <h2>Initialize Vault</h2>
-      <p>Create a master password to secure your files.</p>
+      <div class="panel-header">
+        <span class="panel-icon">&#x1F512;</span>
+        <h2>Initialize Vault</h2>
+      </div>
+      <p class="panel-desc">Create a master password to secure your files.</p>
       <form id="setupForm">
         <div class="form-group">
           <label for="setupPassword">Master Password</label>
-          <input type="password" id="setupPassword" required minlength="8" placeholder="Min 8 characters">
+          <input type="password" id="setupPassword" required minlength="8" placeholder="Min 8 characters" autocomplete="new-password">
+          <div class="input-glow"></div>
         </div>
         <div class="form-group">
           <label for="setupConfirm">Confirm Password</label>
-          <input type="password" id="setupConfirm" required placeholder="Confirm password">
+          <input type="password" id="setupConfirm" required placeholder="Confirm password" autocomplete="new-password">
+          <div class="input-glow"></div>
         </div>
         <div id="passwordStrength" class="strength-indicator"></div>
-        <button type="submit" class="btn btn-primary">Create Vault</button>
+        <button type="submit" class="btn btn-primary">
+          <span class="btn-icon">&#x26A1;</span> Create Vault
+        </button>
       </form>
     </div>
 
     <div id="loginPanel" class="panel hidden">
-      <h2>Unlock Vault</h2>
+      <div class="panel-header">
+        <span class="panel-icon">&#x1F513;</span>
+        <h2>Unlock Vault</h2>
+      </div>
       <form id="loginForm">
         <div class="form-group">
           <label for="loginPassword">Master Password</label>
-          <input type="password" id="loginPassword" required placeholder="Enter master password">
+          <input type="password" id="loginPassword" required placeholder="Enter master password" autocomplete="current-password">
+          <div class="input-glow"></div>
         </div>
-        <button type="submit" class="btn btn-primary">Unlock</button>
+        <button type="submit" class="btn btn-primary">
+          <span class="btn-icon">&#x1F511;</span> Unlock
+        </button>
       </form>
     </div>
 
     <div id="mainPanel" class="panel hidden">
       <div class="toolbar">
-        <span id="statusIndicator" class="status">Unlocked</span>
+        <div class="toolbar-left">
+          <span id="statusIndicator" class="status">
+            <span class="status-dot"></span> Unlocked
+          </span>
+        </div>
         <div class="toolbar-actions">
           <button id="showDirBtn" class="btn btn-secondary">Directory Mode</button>
           <button id="logoutBtn" class="btn btn-secondary">Lock</button>
@@ -101,14 +126,18 @@
           <div id="progressFill" class="progress-fill"></div>
         </div>
         <div id="progressDetail" class="progress-detail"></div>
+        <div id="speedMeter" class="speed-meter hidden">
+          <span id="speedValue">0 MB/s</span>
+          <span id="elapsedTime">00:00</span>
+        </div>
       </div>
 
       <div id="logContainer" class="log-container">
         <div class="log-header">
-          <h3>Activity Log</h3>
+          <h3><span class="log-icon">&gt;_</span> Activity Log</h3>
           <button id="clearLogBtn" class="btn btn-small">Clear</button>
         </div>
-        <div id="logEntries"></div>
+        <div id="logEntries" class="terminal-log"></div>
       </div>
     </div>
   </div>

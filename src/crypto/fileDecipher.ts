@@ -35,11 +35,17 @@ export async function decryptFile(
   const cipherDataSize = fileStat.size - HEADER_SIZE - AUTH_TAG_LENGTH;
 
   if (cipherDataSize < 0) {
-    throw new CryptoError('Invalid encrypted file size - file may be corrupted');
+    throw new CryptoError('Invalid encrypted file - file may be corrupted or too small');
   }
 
+  const fileKey = await deriveFileKey(masterKey.toString('base64'), salt);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', fileKey, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+
+  const authTagStart = HEADER_SIZE + cipherDataSize;
   const authTagStream = fs.createReadStream(inputPath, {
-    start: HEADER_SIZE + cipherDataSize,
+    start: authTagStart,
     end: fileStat.size - 1,
   });
 
@@ -51,18 +57,16 @@ export async function decryptFile(
   });
 
   if (authTagBuffer.length !== AUTH_TAG_LENGTH) {
+    secureClear(fileKey);
+    decipher.destroy();
     throw new CryptoError('Invalid auth tag length - file may be corrupted');
   }
 
-  const fileKey = await deriveFileKey(masterKey.toString('base64'), salt);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', fileKey, iv, {
-    authTagLength: AUTH_TAG_LENGTH,
-  });
   decipher.setAuthTag(authTagBuffer);
 
   try {
     if (cipherDataSize === 0) {
-      const finalBuffer = decipher.final();
+      const finalBuffer = Buffer.concat([decipher.update(Buffer.alloc(0)), decipher.final()]);
       fs.writeFileSync(outputPath, finalBuffer);
 
       if (onProgress) {
