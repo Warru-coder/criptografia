@@ -36,7 +36,7 @@ describe('Full Encrypt/Decrypt Cycle', () => {
     expect(encryptResult.originalSize).toBe(original.length);
     expect(fs.existsSync(encryptedPath)).toBe(true);
 
-    const header = readHeader(encryptedPath);
+    const header = await readHeader(encryptedPath);
     expect(header.magic.equals(MAGIC_BYTES)).toBe(true);
     expect(header.originalFilename).toBe('integration.txt');
     expect(header.originalSize).toBe(original.length);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveKey, deriveKeyForStorage, verifyPassword, generateSalt, generateIv, secureClear } from '../../src/crypto/cryptoUtils';
+import { deriveKey, deriveKeyForStorage, verifyPassword, generateSalt, generateIv, secureClear } from '../../../src/crypto/cryptoUtils';
 
 describe('cryptoUtils', () => {
   it('should generate unique salts', () => {

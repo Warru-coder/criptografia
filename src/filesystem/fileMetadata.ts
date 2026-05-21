@@ -6,9 +6,7 @@ import {
   FILE_VERSION,
   SALT_LENGTH,
   IV_LENGTH,
-  AUTH_TAG_LENGTH,
   HEADER_SIZE,
-  ENCRYPTED_EXTENSION,
 } from '../core/constants';
 import { CryptoError, FileError } from '../core/errorHandler';
 import { getAppDataPath } from '../core/appConfig';
@@ -82,14 +80,17 @@ export function buildHeader(
   return header;
 }
 
-export function readHeader(filePath: string): FileHeader {
+export async function readHeader(filePath: string): Promise<FileHeader> {
   if (!fs.existsSync(filePath)) {
     throw new FileError(`File not found: ${filePath}`);
   }
 
-  const headerBuffer = fs.readFileSync(filePath, {
-    start: 0,
-    end: HEADER_SIZE - 1,
+  const headerBuffer = await new Promise<Buffer>((resolve, reject) => {
+    const stream = fs.createReadStream(filePath, { start: 0, end: HEADER_SIZE - 1 });
+    const chunks: Uint8Array[] = [];
+    stream.on('data', (chunk) => chunks.push(chunk as Uint8Array));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
   });
 
   if (headerBuffer.length < HEADER_SIZE) {

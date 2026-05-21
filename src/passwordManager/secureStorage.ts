@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getAppDataPath, ensureAppDataDirs } from '../core/appConfig';
-import { deriveKeyForStorage, verifyPassword, secureClear } from '../crypto/cryptoUtils';
+import { deriveKey, deriveKeyForStorage, verifyPassword } from '../crypto/cryptoUtils';
 import { PasswordError } from '../core/errorHandler';
 
 export interface MasterPasswordRecord {
@@ -70,9 +70,9 @@ export async function getMasterKey(password: string): Promise<Buffer> {
   );
 
   const salt = Buffer.from(record.salt, 'base64');
-  const key = await deriveKeyForStorage(password, salt);
+  const key = await deriveKey(password, salt);
 
-  return Buffer.from(key.hash);
+  return key;
 }
 
 export function isVaultInitialized(): boolean {

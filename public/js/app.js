@@ -9,20 +9,29 @@ const fileList = document.getElementById('fileList');
 const progressContainer = document.getElementById('progressContainer');
 const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
+const progressLabel = document.getElementById('progressLabel');
+const progressDetail = document.getElementById('progressDetail');
 const logEntries = document.getElementById('logEntries');
 const logoutBtn = document.getElementById('logoutBtn');
+const showDirBtn = document.getElementById('showDirBtn');
+const fileMode = document.getElementById('fileMode');
+const dirMode = document.getElementById('dirMode');
+const encryptDirBtn = document.getElementById('encryptDirBtn');
+const decryptDirBtn = document.getElementById('decryptDirBtn');
+const clearLogBtn = document.getElementById('clearLogBtn');
+const dirInput = document.getElementById('dirInput');
+const dirOutput = document.getElementById('dirOutput');
 
 let masterPassword = '';
+let eventSource = null;
+let dirModeActive = false;
 
 async function checkVaultStatus() {
   try {
-    const res = await fetch('/api/verify-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: '__check__' }),
-    });
+    const res = await fetch('/api/status');
+    const data = await res.json();
 
-    if (res.status === 401) {
+    if (data.vaultInitialized) {
       loginPanel.classList.remove('hidden');
     } else {
       setupPanel.classList.remove('hidden');
@@ -82,6 +91,7 @@ loginForm.addEventListener('submit', async (e) => {
       loginPanel.classList.add('hidden');
       mainPanel.classList.remove('hidden');
       addLog('Vault unlocked', 'success');
+      connectSSE();
     } else {
       addLog('Invalid password', 'error');
     }
@@ -94,7 +104,22 @@ logoutBtn.addEventListener('click', () => {
   masterPassword = '';
   mainPanel.classList.add('hidden');
   loginPanel.classList.remove('hidden');
-  addLog('Vault locked', 'success');
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  addLog('Vault locked', 'info');
+});
+
+showDirBtn.addEventListener('click', () => {
+  dirModeActive = !dirModeActive;
+  fileMode.classList.toggle('hidden', dirModeActive);
+  dirMode.classList.toggle('hidden', !dirModeActive);
+  showDirBtn.textContent = dirModeActive ? 'File Mode' : 'Directory Mode';
+});
+
+clearLogBtn.addEventListener('click', () => {
+  logEntries.innerHTML = '';
 });
 
 dropZone.addEventListener('click', () => fileInput.click());
@@ -124,6 +149,12 @@ function handleFiles(files) {
   }
 }
 
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 function addFileToList(file) {
   const item = document.createElement('div');
   item.className = 'file-item';
@@ -131,64 +162,76 @@ function addFileToList(file) {
   const isEncrypted = file.name.endsWith('.scrypt');
 
   item.innerHTML = `
-    <span class="name">${file.name}</span>
+    <span class="name" title="${file.name}">${file.name}</span>
+    <span class="size">${formatSize(file.size)}</span>
     <div class="actions">
-      <button class="btn btn-primary" onclick="processFile(this, '${isEncrypted ? 'decrypt' : 'encrypt'}')">${isEncrypted ? 'Decrypt' : 'Encrypt'}</button>
+      ${!isEncrypted ? '<button class="btn btn-primary btn-encrypt">Encrypt</button>' : ''}
+      ${isEncrypted ? '<button class="btn btn-primary btn-decrypt">Decrypt</button>' : ''}
+      <button class="btn btn-secondary btn-remove">Remove</button>
     </div>
   `;
 
-  item.dataset.file = JSON.stringify({ name: file.name, size: file.size });
   item._file = file;
+
+  const encryptBtn = item.querySelector('.btn-encrypt');
+  const decryptBtn = item.querySelector('.btn-decrypt');
+  const removeBtn = item.querySelector('.btn-remove');
+
+  if (encryptBtn) {
+    encryptBtn.addEventListener('click', () => processFile(item, 'encrypt'));
+  }
+  if (decryptBtn) {
+    decryptBtn.addEventListener('click', () => processFile(item, 'decrypt'));
+  }
+  removeBtn.addEventListener('click', () => item.remove());
 
   fileList.appendChild(item);
 }
 
-async function processFile(btn, action) {
-  const item = btn.closest('.file-item');
+async function processFile(item, action) {
   const file = item._file;
+  const btn = item.querySelector('.btn-primary');
 
   btn.disabled = true;
   btn.textContent = 'Processing...';
   progressContainer.classList.remove('hidden');
   progressFill.style.width = '0%';
   progressText.textContent = '0%';
+  progressLabel.textContent = action === 'encrypt' ? 'Encrypting...' : 'Decrypting...';
+  progressDetail.textContent = file.name;
 
   const formData = new FormData();
   formData.append('file', file);
   formData.append('password', masterPassword);
 
   try {
-    const eventSource = new EventSource('/api/progress');
-
-    eventSource.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.percentage !== undefined) {
-        progressFill.style.width = `${data.percentage}%`;
-        progressText.textContent = `${data.percentage}%`;
-      }
-    };
-
     const res = await fetch(`/api/${action}`, {
       method: 'POST',
       body: formData,
     });
 
-    eventSource.close();
-
     if (res.ok) {
+      const contentDisposition = res.headers.get('Content-Disposition');
+      let downloadName = action === 'encrypt' ? file.name + '.scrypt' : file.name.replace('.scrypt', '');
+
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?(.+?)"?$/);
+        if (match) downloadName = match[1];
+      }
+
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = action === 'encrypt' ? file.name + '.scrypt' : file.name.replace('.scrypt', '');
+      a.download = downloadName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      addLog(`${action === 'encrypt' ? 'Encrypted' : 'Decrypted'}: ${file.name}`, 'success');
       progressFill.style.width = '100%';
       progressText.textContent = '100%';
+      addLog(`${action === 'encrypt' ? 'Encrypted' : 'Decrypted'}: ${file.name} → ${downloadName}`, 'success');
     } else {
       const data = await res.json();
       addLog(`${action} failed: ${data.error}`, 'error');
@@ -201,12 +244,103 @@ async function processFile(btn, action) {
   btn.textContent = action === 'encrypt' ? 'Encrypt' : 'Decrypt';
 }
 
+async function processDirectory(action) {
+  const inputPath = dirInput.value.trim();
+  const outputPath = dirOutput.value.trim() || undefined;
+
+  if (!inputPath) {
+    addLog('Please enter a directory path', 'error');
+    return;
+  }
+
+  const btn = action === 'encrypt' ? encryptDirBtn : decryptDirBtn;
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  progressContainer.classList.remove('hidden');
+  progressFill.style.width = '0%';
+  progressText.textContent = '0%';
+  progressLabel.textContent = action === 'encrypt' ? 'Encrypting directory...' : 'Decrypting directory...';
+  progressDetail.textContent = inputPath;
+
+  try {
+    const res = await fetch(`/api/${action}-dir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        password: masterPassword,
+        inputPath,
+        outputPath,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      progressFill.style.width = '100%';
+      progressText.textContent = '100%';
+      progressDetail.textContent = `Output: ${data.result.outputDir} | Files: ${data.result.processedFiles}`;
+      addLog(`${action === 'encrypt' ? 'Encrypted' : 'Decrypted'} directory: ${inputPath} (${data.result.processedFiles} files)`, 'success');
+
+      if (data.result.failedFiles > 0) {
+        addLog(`Failed files: ${data.result.failedFiles}`, 'error');
+      }
+    } else {
+      addLog(`Directory ${action} failed: ${data.error}`, 'error');
+    }
+  } catch (error) {
+    addLog(`Directory ${action} failed: ${error.message}`, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = action === 'encrypt' ? 'Encrypt Directory' : 'Decrypt Directory';
+}
+
+encryptDirBtn.addEventListener('click', () => processDirectory('encrypt'));
+decryptDirBtn.addEventListener('click', () => processDirectory('decrypt'));
+
+function connectSSE() {
+  if (eventSource) {
+    eventSource.close();
+  }
+
+  eventSource = new EventSource('/api/progress');
+
+  eventSource.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+
+      if (data.percentage !== undefined) {
+        progressFill.style.width = `${data.percentage}%`;
+        progressText.textContent = `${data.percentage}%`;
+      }
+
+      if (data.currentFilename) {
+        progressDetail.textContent = `${data.currentFile}/${data.totalFiles}: ${data.currentFilename}`;
+      }
+
+      if (data.type === 'encrypt' || data.type === 'decrypt') {
+        progressLabel.textContent = data.type === 'encrypt' ? 'Encrypting...' : 'Decrypting...';
+      }
+    } catch {
+      // ignore parse errors
+    }
+  };
+
+  eventSource.onerror = () => {
+    // browser will auto-reconnect
+  };
+}
+
 function addLog(message, type = 'info') {
   const entry = document.createElement('div');
   entry.className = `log-entry ${type}`;
   const timestamp = new Date().toLocaleTimeString();
   entry.textContent = `[${timestamp}] ${message}`;
   logEntries.prepend(entry);
+
+  if (logEntries.children.length > 100) {
+    logEntries.removeChild(logEntries.lastChild);
+  }
 }
 
 checkVaultStatus();

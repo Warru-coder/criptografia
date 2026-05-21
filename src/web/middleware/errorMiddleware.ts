@@ -3,7 +3,7 @@ import { logger } from '../../utils/logger';
 
 export function errorMiddleware(
   err: Error,
-  req: Request,
+  _req: Request,
   res: Response,
   _next: NextFunction
 ): void {

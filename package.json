@@ -1,6 +1,6 @@
 {
   "name": "securecrypt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Secure file encryption/decryption application for Windows",
   "main": "dist/cli/cliRunner.js",
   "bin": {
@@ -12,14 +12,25 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:web\"",
     "build": "tsc",
     "start:web": "node dist/web/server.js",
+    "start:cli": "node dist/cli/cliRunner.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:stress": "vitest run tests/stress/",
     "lint": "eslint src --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "package": "pkg . -t node22-win-x64 -o dist/securecrypt.exe --compress GZip"
   },
   "keywords": ["encryption", "aes-256-gcm", "argon2", "security", "cli"],
   "author": "",
   "license": "MIT",
+  "pkg": {
+    "scripts": "dist/**/*.js",
+    "assets": [
+      "public/**/*"
+    ],
+    "targets": ["node22-win-x64"],
+    "outputPath": "dist"
+  },
   "dependencies": {
     "argon2": "^0.40.3",
     "commander": "^12.1.0",
@@ -45,7 +56,8 @@
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@yao-pkg/pkg": "^6.0.0"
   },
   "engines": {
     "node": ">=20.0.0"

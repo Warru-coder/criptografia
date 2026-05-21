@@ -3,9 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import { encryptFile } from '../../src/crypto/fileCipher';
-import { decryptFile } from '../../src/crypto/fileDecipher';
-import { deriveKey } from '../../src/crypto/cryptoUtils';
+import { encryptFile } from '../../../src/crypto/fileCipher';
+import { decryptFile } from '../../../src/crypto/fileDecipher';
+import { deriveKey } from '../../../src/crypto/cryptoUtils';
 
 const testDir = path.join(os.tmpdir(), 'securecrypt-test-' + Date.now());
 
@@ -90,5 +90,26 @@ describe('fileCipher', () => {
 
     const decryptedContent = fs.readFileSync(decryptedPath);
     expect(decryptedContent.equals(originalContent)).toBe(true);
+  });
+
+  it('should encrypt and decrypt an empty file', async () => {
+    const inputPath = path.join(testDir, 'empty.txt');
+    const encryptedPath = path.join(testDir, 'empty.txt.scrypt');
+    const decryptedPath = path.join(testDir, 'empty_decrypted.txt');
+
+    fs.writeFileSync(inputPath, Buffer.alloc(0));
+
+    const masterKey = crypto.randomBytes(32);
+    const progressUpdates: number[] = [];
+
+    await encryptFile(inputPath, encryptedPath, masterKey);
+    const result = await decryptFile(encryptedPath, decryptedPath, masterKey, (progress) => {
+      progressUpdates.push(progress.percentage);
+    });
+
+    const decryptedContent = fs.readFileSync(decryptedPath);
+    expect(decryptedContent.length).toBe(0);
+    expect(result.originalSize).toBe(0);
+    expect(progressUpdates).toEqual([100]);
   });
 });

@@ -2,12 +2,14 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
-import { encryptFile, EncryptProgress } from '../crypto/fileCipher';
-import { decryptFile, DecryptProgress } from '../crypto/fileDecipher';
-import { verifyMasterPassword, getMasterKey, isVaultInitialized, setupMasterPassword } from '../passwordManager/secureStorage';
-import { validatePassword } from '../passwordManager/passwordValidator';
-import { ensureAppDataDirs } from '../core/appConfig';
-import { logger } from '../utils/logger';
+import { pipeline } from 'stream/promises';
+import { encryptFile, EncryptProgress } from '../../crypto/fileCipher';
+import { decryptFile, DecryptProgress } from '../../crypto/fileDecipher';
+import { encryptDirectory, decryptDirectory, DirectoryProgress } from '../../filesystem/directoryProcessor';
+import { verifyMasterPassword, getMasterKey, isVaultInitialized, setupMasterPassword } from '../../passwordManager/secureStorage';
+import { validatePassword } from '../../passwordManager/passwordValidator';
+import { ensureAppDataDirs } from '../../core/appConfig';
+import { logger } from '../../utils/logger';
 
 const router = express.Router();
 
@@ -122,14 +124,18 @@ router.post('/encrypt', upload.single('file'), async (req, res) => {
       });
     });
 
-    const encryptedData = fs.readFileSync(outputPath);
-
+    const fileStat = fs.statSync(outputPath);
     res.setHeader('Content-Disposition', `attachment; filename="${path.basename(outputPath)}"`);
     res.setHeader('Content-Type', 'application/octet-stream');
-    res.send(encryptedData);
+    res.setHeader('Content-Length', fileStat.size.toString());
+
+    const fileStream = fs.createReadStream(outputPath);
+    await pipeline(fileStream, res);
 
     fs.unlinkSync(inputPath);
-    fs.unlinkSync(outputPath);
+    if (fs.existsSync(outputPath)) {
+      fs.unlinkSync(outputPath);
+    }
 
     logger.info(`File encrypted via web UI: ${req.file.originalname}`);
   } catch (error) {
@@ -170,18 +176,166 @@ router.post('/decrypt', upload.single('file'), async (req, res) => {
       });
     });
 
-    const decryptedData = fs.readFileSync(outputPath);
-
+    const fileStat = fs.statSync(outputPath);
     res.setHeader('Content-Disposition', `attachment; filename="${path.basename(outputPath)}"`);
     res.setHeader('Content-Type', 'application/octet-stream');
-    res.send(decryptedData);
+    res.setHeader('Content-Length', fileStat.size.toString());
+
+    const fileStream = fs.createReadStream(outputPath);
+    await pipeline(fileStream, res);
 
     fs.unlinkSync(inputPath);
-    fs.unlinkSync(outputPath);
+    if (fs.existsSync(outputPath)) {
+      fs.unlinkSync(outputPath);
+    }
 
     logger.info(`File decrypted via web UI: ${req.file.originalname}`);
   } catch (error) {
     logger.error(`Decrypt failed: ${(error as Error).message}`);
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+router.post('/encrypt-dir', async (req, res) => {
+  try {
+    const { password, inputPath, outputPath } = req.body;
+
+    if (!password || !inputPath) {
+      res.status(400).json({ error: 'Password and inputPath are required' });
+      return;
+    }
+
+    if (!fs.existsSync(inputPath)) {
+      res.status(400).json({ error: 'Input directory not found' });
+      return;
+    }
+
+    if (!fs.statSync(inputPath).isDirectory()) {
+      res.status(400).json({ error: 'Input path is not a directory' });
+      return;
+    }
+
+    const isValid = await verifyMasterPassword(password);
+    if (!isValid) {
+      res.status(401).json({ error: 'Invalid password' });
+      return;
+    }
+
+    const masterKey = await getMasterKey(password);
+    const outDir = outputPath || inputPath + '.encrypted';
+
+    const result = await encryptDirectory(
+      inputPath,
+      outDir,
+      masterKey,
+      (progress: DirectoryProgress) => {
+        broadcastProgress({
+          type: 'encrypt-dir',
+          ...progress,
+        });
+      }
+    );
+
+    logger.info(`Directory encrypted via web UI: ${inputPath}`);
+    res.json({ success: true, result });
+  } catch (error) {
+    logger.error(`Directory encrypt failed: ${(error as Error).message}`);
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+router.post('/decrypt-dir', async (req, res) => {
+  try {
+    const { password, inputPath, outputPath } = req.body;
+
+    if (!password || !inputPath) {
+      res.status(400).json({ error: 'Password and inputPath are required' });
+      return;
+    }
+
+    if (!fs.existsSync(inputPath)) {
+      res.status(400).json({ error: 'Input directory not found' });
+      return;
+    }
+
+    if (!fs.statSync(inputPath).isDirectory()) {
+      res.status(400).json({ error: 'Input path is not a directory' });
+      return;
+    }
+
+    const isValid = await verifyMasterPassword(password);
+    if (!isValid) {
+      res.status(401).json({ error: 'Invalid password' });
+      return;
+    }
+
+    const masterKey = await getMasterKey(password);
+    const outDir = outputPath || inputPath + '.decrypted';
+
+    const result = await decryptDirectory(
+      inputPath,
+      outDir,
+      masterKey,
+      (progress: DirectoryProgress) => {
+        broadcastProgress({
+          type: 'decrypt-dir',
+          ...progress,
+        });
+      }
+    );
+
+    logger.info(`Directory decrypted via web UI: ${inputPath}`);
+    res.json({ success: true, result });
+  } catch (error) {
+    logger.error(`Directory decrypt failed: ${(error as Error).message}`);
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
+router.get('/status', (_req, res) => {
+  res.json({
+    vaultInitialized: isVaultInitialized(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+  });
+});
+
+router.post('/verify', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const fileBuffer = fs.readFileSync(req.file.path);
+
+    if (fileBuffer.length < 148) {
+      res.status(400).json({ error: 'File too small to be a valid encrypted file' });
+      fs.unlinkSync(req.file.path);
+      return;
+    }
+
+    const magic = fileBuffer.subarray(0, 6).toString();
+    const isValidMagic = magic === 'SCRYPT';
+
+    const fileSize = fileBuffer.length;
+    const headerSize = 128;
+    const authTagSize = 16;
+    const hasAuthTag = fileSize > headerSize + authTagSize;
+
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      valid: isValidMagic,
+      isEncryptedFile: isValidMagic,
+      hasAuthTag,
+      fileSize,
+      message: isValidMagic
+        ? 'File appears to be a valid SecureCrypt encrypted file'
+        : 'File is not a SecureCrypt encrypted file',
+    });
+  } catch (error) {
+    logger.error(`Verify failed: ${(error as Error).message}`);
     res.status(500).json({ error: (error as Error).message });
   }
 });

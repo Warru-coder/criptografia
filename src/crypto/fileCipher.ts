@@ -50,7 +50,7 @@ export async function encryptFile(
 
   let bytesProcessed = 0;
 
-  readStream.on('data', (chunk: Buffer) => {
+  readStream.on('data', (chunk) => {
     bytesProcessed += chunk.length;
     if (onProgress) {
       onProgress({

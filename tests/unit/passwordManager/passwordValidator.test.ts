@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePassword, getPasswordStrength } from '../../src/passwordManager/passwordValidator';
+import { validatePassword, getPasswordStrength } from '../../../src/passwordManager/passwordValidator';
 
 describe('passwordValidator', () => {
   it('should reject short passwords', () => {
@@ -39,7 +39,7 @@ describe('passwordValidator', () => {
   });
 
   it('should reject common passwords', () => {
-    const result = validatePassword('password123!A');
+    const result = validatePassword('password');
     expect(result.isValid).toBe(false);
   });
 

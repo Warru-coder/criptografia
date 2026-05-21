@@ -1,4 +1,3 @@
-import { PasswordError } from '../core/errorHandler';
 
 export interface PasswordValidationResult {
   isValid: boolean;

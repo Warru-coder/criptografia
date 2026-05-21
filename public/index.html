@@ -44,32 +44,70 @@
     <div id="mainPanel" class="panel hidden">
       <div class="toolbar">
         <span id="statusIndicator" class="status">Unlocked</span>
-        <button id="logoutBtn" class="btn btn-secondary">Lock</button>
+        <div class="toolbar-actions">
+          <button id="showDirBtn" class="btn btn-secondary">Directory Mode</button>
+          <button id="logoutBtn" class="btn btn-secondary">Lock</button>
+        </div>
       </div>
 
-      <div id="dropZone" class="drop-zone">
-        <div class="drop-content">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-          <p>Drag & drop files here or click to select</p>
-          <input type="file" id="fileInput" multiple hidden>
+      <div id="fileMode">
+        <div id="dropZone" class="drop-zone">
+          <div class="drop-content">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <p>Drag & drop files here or click to select</p>
+            <input type="file" id="fileInput" multiple hidden>
+          </div>
+        </div>
+      </div>
+
+      <div id="dirMode" class="hidden">
+        <div id="dirDropZone" class="drop-zone">
+          <div class="drop-content">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <p>Directory mode: select a folder to encrypt/decrypt</p>
+            <p class="hint">Note: Use the CLI for directory operations: <code>securecrypt encrypt dir -i &lt;path&gt;</code></p>
+          </div>
+        </div>
+        <div class="dir-controls">
+          <div class="form-group">
+            <label for="dirInput">Directory Path (server-side)</label>
+            <input type="text" id="dirInput" placeholder="C:\path\to\directory">
+          </div>
+          <div class="form-group">
+            <label for="dirOutput">Output Directory (optional)</label>
+            <input type="text" id="dirOutput" placeholder="C:\path\to\output">
+          </div>
+          <div class="dir-actions">
+            <button id="encryptDirBtn" class="btn btn-primary">Encrypt Directory</button>
+            <button id="decryptDirBtn" class="btn btn-primary">Decrypt Directory</button>
+          </div>
         </div>
       </div>
 
       <div id="fileList" class="file-list"></div>
 
       <div id="progressContainer" class="progress-container hidden">
+        <div class="progress-info">
+          <span id="progressLabel">Processing...</span>
+          <span id="progressText" class="progress-text">0%</span>
+        </div>
         <div class="progress-bar">
           <div id="progressFill" class="progress-fill"></div>
         </div>
-        <span id="progressText" class="progress-text">0%</span>
+        <div id="progressDetail" class="progress-detail"></div>
       </div>
 
       <div id="logContainer" class="log-container">
-        <h3>Activity Log</h3>
+        <div class="log-header">
+          <h3>Activity Log</h3>
+          <button id="clearLogBtn" class="btn btn-small">Clear</button>
+        </div>
         <div id="logEntries"></div>
       </div>
     </div>

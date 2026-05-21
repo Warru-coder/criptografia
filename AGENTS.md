@@ -24,13 +24,14 @@ SecureCrypt is a legitimate file encryption/decryption application built with No
 ## Architecture
 ```
 src/
-├── core/          # Config, constants, error handling, event bus
-├── crypto/        # AES-256-GCM, Argon2id, key derivation, integrity
-├── filesystem/    # File scanning, streaming, metadata, exclusions
-├── passwordManager/ # Password validation, secure storage, vault
-├── cli/           # CLI commands, parser, progress bar
-├── web/           # Express server, routes, middleware
-└── utils/         # Logger, path utilities, memory monitor
+├── core/             # Config, constants, error handling
+├── crypto/           # AES-256-GCM, Argon2id, key derivation, integrity
+├── filesystem/       # File scanning, streaming, metadata, exclusions, directory processing
+├── passwordManager/  # Password validation, secure storage, vault
+├── backgroundTasks/  # Task queue, worker pool, pause/resume, scheduler
+├── cli/              # CLI commands, parser, progress bar
+├── web/              # Express server, routes, middleware
+└── utils/            # Logger, path utilities, memory monitor
 ```
 
 ## Commands
