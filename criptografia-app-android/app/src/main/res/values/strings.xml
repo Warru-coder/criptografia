@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SecureCrypt</string>
+    <string name="app_tagline">Secure Password &amp; Document Vault</string>
+    
+    <!-- Authentication -->
+    <string name="auth_title">Unlock SecureCrypt</string>
+    <string name="auth_subtitle">Use your biometric or master password</string>
+    <string name="auth_biometric_prompt">Authenticate to continue</string>
+    <string name="auth_biometric_description">Use fingerprint or face recognition</string>
+    <string name="auth_use_password">Use password instead</string>
+    <string name="auth_master_password">Master Password</string>
+    <string name="auth_unlock">Unlock</string>
+    
+    <!-- Setup -->
+    <string name="setup_welcome">Welcome to SecureCrypt</string>
+    <string name="setup_create_master">Create Master Password</string>
+    <string name="setup_confirm_master">Confirm Master Password</string>
+    <string name="setup_password_hint">Minimum 12 characters</string>
+    <string name="setup_enable_biometric">Enable Biometric Authentication</string>
+    <string name="setup_skip_biometric">Skip for now</string>
+    <string name="setup_complete">Complete Setup</string>
+    
+    <!-- Navigation -->
+    <string name="nav_passwords">Passwords</string>
+    <string name="nav_documents">Documents</string>
+    <string name="nav_notes">Notes</string>
+    <string name="nav_settings">Settings</string>
+    
+    <!-- Passwords -->
+    <string name="passwords_title">Saved Passwords</string>
+    <string name="passwords_add">Add Password</string>
+    <string name="passwords_search">Search passwords...</string>
+    <string name="passwords_empty">No passwords saved yet</string>
+    <string name="passwords_copy_username">Copy Username</string>
+    <string name="passwords_copy_password">Copy Password</string>
+    <string name="passwords_copy_url">Copy URL</string>
+    <string name="passwords_delete">Delete</string>
+    <string name="passwords_edit">Edit</string>
+    
+    <!-- Add/Edit Password -->
+    <string name="password_title_label">Title</string>
+    <string name="password_title_hint">e.g., Gmail, Bank Account</string>
+    <string name="password_username_label">Username / Email</string>
+    <string name="password_password_label">Password</string>
+    <string name="password_url_label">Website URL</string>
+    <string name="password_notes_label">Notes</string>
+    <string name="password_generate">Generate Strong Password</string>
+    <string name="password_save">Save Password</string>
+    <string name="password_cancel">Cancel</string>
+    
+    <!-- Documents -->
+    <string name="documents_title">Secure Documents</string>
+    <string name="documents_add">Add Document</string>
+    <string name="documents_search">Search documents...</string>
+    <string name="documents_empty">No documents stored yet</string>
+    <string name="documents_view">View</string>
+    <string name="documents_decrypt">Decrypt</string>
+    <string name="documents_delete">Delete</string>
+    <string name="documents_import">Import Document</string>
+    <string name="documents_export">Export Document</string>
+    
+    <!-- Notes -->
+    <string name="notes_title">Secure Notes</string>
+    <string name="notes_add">Add Note</string>
+    <string name="notes_search">Search notes...</string>
+    <string name="notes_empty">No notes yet</string>
+    <string name="notes_save">Save Note</string>
+    <string name="notes_delete">Delete Note</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_biometric">Biometric Authentication</string>
+    <string name="settings_auto_lock">Auto-lock Timeout</string>
+    <string name="settings_change_master">Change Master Password</string>
+    <string name="settings_lock_now">Lock Now</string>
+    <string name="settings_backup">Backup &amp; Restore</string>
+    <string name="settings_export">Export Encrypted Backup</string>
+    <string name="settings_import">Import Backup</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_privacy">Privacy Policy</string>
+    <string name="settings_clear_data">Clear All Data</string>
+    
+    <!-- Security Warnings -->
+    <string name="warning_weak_password">Password is too weak</string>
+    <string name="warning_passwords_match">Passwords do not match</string>
+    <string name="warning_biometric_failed">Biometric authentication failed</string>
+    <string name="warning_biometric_not_available">Biometric not available on this device</string>
+    <string name="warning_import_failed">Failed to import file</string>
+    <string name="warning_export_failed">Failed to export file</string>
+    <string name="warning_delete_confirm">Are you sure you want to delete this item?</string>
+    <string name="warning_clear_data_confirm">This will permanently delete ALL data. This cannot be undone.</string>
+    
+    <!-- Success Messages -->
+    <string name="success_password_saved">Password saved securely</string>
+    <string name="success_password_copied">Copied to clipboard</string>
+    <string name="success_document_imported">Document encrypted and stored</string>
+    <string name="success_document_exported">Document decrypted and exported</string>
+    <string name="success_backup_created">Encrypted backup created</string>
+    <string name="success_data_cleared">All data cleared</string>
+    
+    <!-- Auto-lock options -->
+    <string name="lock_immediate">Immediately</string>
+    <string name="lock_30s">30 seconds</string>
+    <string name="lock_1m">1 minute</string>
+    <string name="lock_5m">5 minutes</string>
+    <string name="lock_15m">15 minutes</string>
+    <string name="lock_never">Never</string>
+    
+    <!-- Password generator -->
+    <string name="generator_length">Password Length</string>
+    <string name="generator_uppercase">Uppercase (A-Z)</string>
+    <string name="generator_lowercase">Lowercase (a-z)</string>
+    <string name="generator_numbers">Numbers (0-9)</string>
+    <string name="generator_symbols">Symbols (!@#$...)</string>
+    <string name="generator_generate">Generate</string>
+    <string name="generator_copy">Copy to Clipboard</string>
+    
+    <!-- Clipboard security -->
+    <string name="clipboard_cleared">Clipboard cleared for security</string>
+    <string name="clipboard_warning">Password will be cleared from clipboard in 30 seconds</string>
+</resources>
