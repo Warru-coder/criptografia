@@ -117,3 +117,6 @@ SecureCrypt/
 ## License
 
 MIT
+=======
+# criptografia
+>>>>>>> f71fe9e089cab2f5e016f1995b62807b32b3a941
