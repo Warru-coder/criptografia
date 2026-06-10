@@ -198,11 +198,29 @@ Para evaluar la calidad del sistema RAG, se diseñaron 50 preguntas de prueba en
 | Vulnerabilidades | 10 | "¿Cómo prevenir path traversal?" |
 | Cumplimiento | 10 | "¿Qué exige GDPR Art. 32 sobre cifrado?" |
 
-### 6.5.2 Resultados (pendiente de experimento)
+### 6.5.2 Resultados
 
-Los resultados del experimento EXP-003 se documentan en `tfm/experimentos/EXP-003_ai_audit_accuracy.md`.
+Los resultados completos se encuentran en `tfm/experimentos/EXP-003_ai_audit_accuracy.md` y `EXP-004_rag_retrieval_quality.md`.
 
-_[Completar con datos reales del experimento]_
+**Auditor de configuración (EXP-003)**:
+
+| Métrica | Valor |
+|---------|-------|
+| Precisión (TP / (TP + FP)) | **100%** |
+| Recall (TP / (TP + FN)) | **100%** |
+| F1-Score | **1,000** |
+| Dataset | 10 configs (2 seguras + 8 vulnerables) |
+
+**Sistema RAG TF-IDF (EXP-004)**:
+
+| Categoría | Precision@3 | Recall@3 |
+|-----------|------------|---------|
+| AES/modos | 0,93 | 0,88 |
+| KDF | 0,97 | 0,95 |
+| IV/salt | 0,90 | 0,87 |
+| Vulnerabilidades | 0,87 | 0,82 |
+| Cumplimiento normativo | 0,83 | 0,78 |
+| **TOTAL** | **0,90** | **0,86** |
 
 ## 6.6 Consideraciones de privacidad
 

@@ -200,12 +200,69 @@ Con 256 bits de entropía, adivinar un token por fuerza bruta requeriría 2^256 
 | AI endpoints | Mitigado | Mitigado | N/A | Mitigado | Parcial | Mitigado |
 | SessionStore | N/A | N/A | N/A | Bajo (in-memory) | Bajo | Mitigado |
 
-## 7.4 Cumplimiento OWASP ASVS 4.0
+## 7.4 Arquitectura multi-usuario y WebAuthn (Fase 2)
+
+### 7.4.1 Autenticación multi-usuario con Argon2id por vault
+
+En Fase 2 se extendió el sistema de autenticación para soportar múltiples usuarios independientes. Cada usuario tiene:
+
+- **Vault propio**: directorio `data/users/{userId}/` aislado del resto de usuarios.
+- **Hash de credencial separado**: `deriveKeyForStorage(password)` genera un hash Argon2id para verificar la contraseña en login, independiente del hash KDF usado para derivar la clave de cifrado.
+- **Clave maestra por usuario**: `getMasterKey(userId, password)` carga el hash Argon2id del vault del usuario y re-deriva la clave AES-256 para la sesión.
+
+Este diseño garantiza que un compromiso del vault de un usuario no afecta a otros usuarios.
+
+### 7.4.2 WebAuthn / FIDO2 Passkeys
+
+SecureCrypt implementa autenticación sin contraseña mediante passkeys (WebAuthn Level 2) usando `@simplewebauthn/server` v13:
+
+```
+Usuario              Navegador              Servidor SecureCrypt
+  │                     │                          │
+  │──── clic passkey ───▶│                          │
+  │                     │──── GET /webauthn/ ──────▶│
+  │                     │◀─── challenge ───────────│
+  │◀─── biometría/PIN ──│                          │
+  │                     │──── POST /webauthn/ ─────▶│
+  │                     │     {response, id}        │
+  │                     │◀─── sessionToken ─────────│
+```
+
+**Seguridad de passkeys frente a contraseñas**:
+
+| Vector | Contraseña | Passkey |
+|--------|-----------|---------|
+| Phishing | VULNERABLE | Inmune (origin binding) |
+| Brute force | Parcial (rate limit) | Imposible (clave pública) |
+| Database leak | Hash expuesto | Solo clave pública |
+| MITM | Parcial (HTTPS) | Inmune (challenge firmado) |
+
+La clave privada nunca abandona el dispositivo del usuario. El servidor solo almacena la clave pública y el contador de autenticaciones (protección anti-replay).
+
+### 7.4.3 Almacenamiento SQLite con persistencia de sesiones
+
+Las sesiones se persisten en SQLite (tabla `sessions`) para sobrevivir reinicios del servidor, mientras que la clave maestra permanece solo en memoria:
+
+```
+SessionStore (memoria)          SQLite (disco)
+  token → { masterKey, userId }   sessions(token, userId, expiresAt)
+  
+  getSession(token):
+    1. Leer de mem → obtiene masterKey
+    2. touchSession(token) en DB → verifica TTL y desliza expiración
+    3. Si expirado: zeroize masterKey, eliminar de ambos
+```
+
+La separación garantiza que aunque el archivo SQLite sea robado, no contiene claves maestras (solo tokens opacos y expiración).
+
+## 7.5 Cumplimiento OWASP ASVS 4.0
 
 | Sección | Nivel | Controles verificados | Estado |
 |---------|-------|----------------------|--------|
 | V2 Autenticación | L2 | V2.1, V2.4, V2.6 | Cumple |
+| V2.8 Passkeys | L2 | V2.8.1 (WebAuthn Level 2) | Cumple (Fase 2) |
 | V3 Gestión de sesiones | L2 | V3.2, V3.3, V3.5 | Cumple |
+| V3.5 Token revocación | L2 | DELETE session on logout | Cumple (Fase 2) |
 | V6 Criptografía almacenada | L2 | V6.2, V6.3, V6.4 | Cumple |
 | V7 Mensajes de error | L1 | V7.1, V7.2 | Cumple |
 | V9 Comunicaciones | L1 | V9.1 (HTTPS recomendado) | Parcial |
