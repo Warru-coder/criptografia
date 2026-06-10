@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { apiRoutes } from './routes/apiRoutes';
 import { authRoutes } from './routes/authRoutes';
+import { aiRoutes } from './routes/aiRoutes';
 import { pageRoutes } from './routes/pageRoutes';
 import { errorMiddleware } from './middleware/errorMiddleware';
 import { logger } from '../utils/logger';
@@ -36,6 +37,7 @@ export function createServer(): express.Application {
 
   app.use('/', pageRoutes);
   app.use('/api/auth', authRoutes);
+  app.use('/api/ai', aiRoutes);
   app.use('/api', apiRoutes);
 
   app.use(errorMiddleware);

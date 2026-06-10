@@ -70,8 +70,44 @@
           </span>
         </div>
         <div class="toolbar-actions">
+          <button id="showAiBtn" class="btn btn-secondary">AI Advisor</button>
           <button id="showDirBtn" class="btn btn-secondary">Directory Mode</button>
           <button id="logoutBtn" class="btn btn-secondary">Lock</button>
+        </div>
+      </div>
+
+      <!-- AI Advisor Panel -->
+      <div id="aiPanel" class="ai-panel hidden">
+        <div class="ai-panel-header">
+          <span class="panel-icon">&#x1F9E0;</span>
+          <h3>AI Crypto Advisor</h3>
+          <span id="aiStatusBadge" class="ai-status-badge ai-offline">○ Checking...</span>
+        </div>
+        <div class="ai-tabs">
+          <button class="ai-tab-btn active" data-tab="auditor">Config Auditor</button>
+          <button class="ai-tab-btn" data-tab="chat">Chat Assistant</button>
+        </div>
+
+        <!-- Auditor Tab -->
+        <div id="auditorTab" class="ai-tab-content">
+          <p class="panel-desc">Paste your cryptographic configuration as JSON to get a security audit against OWASP/NIST standards.</p>
+          <div class="form-group">
+            <label for="configInput">Configuration JSON</label>
+            <textarea id="configInput" class="config-textarea" rows="8" placeholder='{"algorithm":"AES-256-GCM","kdf":"argon2id","kdfParams":{"memoryCost":65536,"timeCost":3,"parallelism":2},"keyLength":32,"ivLength":12,"tagLength":16,"saltLength":32}'></textarea>
+          </div>
+          <button id="auditBtn" class="btn btn-primary">
+            <span class="btn-icon">&#x1F50D;</span> Audit Configuration
+          </button>
+          <div id="auditResults" class="audit-results hidden"></div>
+        </div>
+
+        <!-- Chat Tab -->
+        <div id="chatTab" class="ai-tab-content hidden">
+          <div id="chatHistory" class="chat-history"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="Ask about AES-GCM, Argon2id, key management..." autocomplete="off">
+            <button id="chatSendBtn" class="btn btn-primary">Send</button>
+          </div>
         </div>
       </div>
 
