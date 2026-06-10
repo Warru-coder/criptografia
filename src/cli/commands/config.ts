@@ -1,4 +1,4 @@
-import { loadConfig, saveConfig, defaultConfig, AppConfig } from '../../core/appConfig';
+import { loadConfig, saveConfig, defaultConfig, AppConfig } from '../../config';
 
 export async function configCommand(options: {
   action?: string;

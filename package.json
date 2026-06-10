@@ -20,7 +20,13 @@
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "package": "pkg . -t node22-win-x64 -o dist/securecrypt.exe --compress GZip"
   },
-  "keywords": ["encryption", "aes-256-gcm", "argon2", "security", "cli"],
+  "keywords": [
+    "encryption",
+    "aes-256-gcm",
+    "argon2",
+    "security",
+    "cli"
+  ],
   "author": "",
   "license": "MIT",
   "pkg": {
@@ -28,14 +34,21 @@
     "assets": [
       "public/**/*"
     ],
-    "targets": ["node22-win-x64"],
+    "targets": [
+      "node22-win-x64"
+    ],
     "outputPath": "dist"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^13.3.1",
+    "@types/cors": "^2.8.19",
     "argon2": "^0.40.3",
-    "commander": "^12.1.0",
+    "better-sqlite3": "^12.10.0",
     "cli-progress": "^3.12.0",
+    "commander": "^12.1.0",
     "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
@@ -44,6 +57,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cli-progress": "^3.11.6",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.0",
@@ -51,13 +65,13 @@
     "@types/node": "^22.10.0",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
+    "@yao-pkg/pkg": "^6.0.0",
     "concurrently": "^9.1.0",
     "eslint": "^9.17.0",
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8",
-    "@yao-pkg/pkg": "^6.0.0"
+    "vitest": "^2.1.8"
   },
   "engines": {
     "node": ">=20.0.0"

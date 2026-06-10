@@ -9,7 +9,7 @@ import {
   HEADER_SIZE,
 } from '../core/constants';
 import { CryptoError, FileError } from '../core/errorHandler';
-import { getAppDataPath } from '../core/appConfig';
+import { getAppDataPath } from '../config';
 
 export interface FileHeader {
   magic: Buffer;

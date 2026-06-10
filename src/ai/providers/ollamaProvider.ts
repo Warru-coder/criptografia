@@ -1,6 +1,4 @@
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'qwen2.5-coder:7b-instruct-q4_K_M';
-const FETCH_TIMEOUT_MS = 30_000;
+import { env } from '../../config';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -24,7 +22,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 export async function isOllamaAvailable(): Promise<boolean> {
   try {
     const res = await fetchWithTimeout(
-      `${OLLAMA_BASE_URL}/models`,
+      `${env.ollamaBaseUrl}/models`,
       { method: 'GET' },
       5_000
     );
@@ -40,13 +38,13 @@ export async function chat(messages: ChatMessage[], systemPrompt?: string): Prom
     : messages;
 
   const res = await fetchWithTimeout(
-    `${OLLAMA_BASE_URL}/chat/completions`,
+    `${env.ollamaBaseUrl}/chat/completions`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: OLLAMA_MODEL, messages: all, stream: false, temperature: 0.2 }),
+      body: JSON.stringify({ model: env.ollamaModel, messages: all, stream: false, temperature: 0.2 }),
     },
-    FETCH_TIMEOUT_MS
+    env.ollamaTimeoutMs
   );
 
   if (!res.ok) {
@@ -57,4 +55,4 @@ export async function chat(messages: ChatMessage[], systemPrompt?: string): Prom
   return data.choices[0].message.content.trim();
 }
 
-export { OLLAMA_MODEL };
+export const OLLAMA_MODEL = env.ollamaModel;

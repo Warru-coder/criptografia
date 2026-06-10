@@ -80,7 +80,7 @@ export function createCliParser(): Command {
     .command('status')
     .description('Show vault status')
     .action(async () => {
-      const { isVaultInitialized } = await import('../passwordManager/secureStorage.js');
+      const { isVaultInitializedLegacy: isVaultInitialized } = await import('../passwordManager/secureStorage.js');
       if (isVaultInitialized()) {
         console.log('Vault: initialized');
       } else {

@@ -89,7 +89,7 @@ export async function readHeader(filePath: string): Promise<Header> {
   const chunks: Uint8Array[] = [];
   const stream = fs.createReadStream(filePath, { start: 0, end: HDR_LEN - 1 });
   await new Promise<void>((resolve, reject) => {
-    stream.on('data', (c: Buffer) => chunks.push(c));
+    stream.on('data', (c: Buffer | string) => chunks.push(typeof c === 'string' ? Buffer.from(c) : c));
     stream.on('end', () => resolve());
     stream.on('error', reject);
   });
@@ -130,7 +130,7 @@ export async function encryptFile(inputPath: string, masterKey: Buffer, onProgre
   const ws = fs.createWriteStream(tmpPath, { flags: 'a' });
 
   let done = 0;
-  rs.on('data', (c: Buffer) => {
+  rs.on('data', (c: Buffer | string) => {
     done += c.length;
     if (onProgress) onProgress({ bytes: done, total: stat.size, pct: Math.round((done / stat.size) * 100) });
   });
@@ -161,7 +161,7 @@ export async function decryptFile(inputPath: string, masterKey: Buffer, onProgre
   const tagChunks: Uint8Array[] = [];
   const tagStream = fs.createReadStream(inputPath, { start: tagStart, end: stat.size - 1 });
   await new Promise<void>((resolve, reject) => {
-    tagStream.on('data', (c: Buffer) => tagChunks.push(c));
+    tagStream.on('data', (c: Buffer | string) => tagChunks.push(typeof c === 'string' ? Buffer.from(c) : c));
     tagStream.on('end', () => resolve());
     tagStream.on('error', reject);
   });
@@ -180,7 +180,7 @@ export async function decryptFile(inputPath: string, masterKey: Buffer, onProgre
     const rs = fs.createReadStream(inputPath, { start: HDR_LEN, end: HDR_LEN + cipherSize - 1, highWaterMark: BUF_SIZE });
     const ws = fs.createWriteStream(tmpPath);
     let done = 0;
-    rs.on('data', (c: Buffer) => {
+    rs.on('data', (c: Buffer | string) => {
       done += c.length;
       if (onProgress) onProgress({ bytes: done, total: cipherSize, pct: Math.round((done / cipherSize) * 100) });
     });

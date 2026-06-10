@@ -6,9 +6,8 @@ import { pipeline } from 'stream/promises';
 import { encryptFile, EncryptProgress } from '../../crypto/fileCipher';
 import { decryptFile, DecryptProgress } from '../../crypto/fileDecipher';
 import { encryptDirectory, decryptDirectory, DirectoryProgress } from '../../filesystem/directoryProcessor';
-import { verifyMasterPassword, isVaultInitialized, setupMasterPassword } from '../../passwordManager/secureStorage';
-import { validatePassword } from '../../passwordManager/passwordValidator';
-import { ensureAppDataDirs } from '../../core/appConfig';
+import { env, ensureAppDataDirs } from '../../config';
+import { usersExist } from '../../database/userRepository';
 import { ForbiddenPathError } from '../../core/errorHandler';
 import { requireSession } from '../middleware/requireSession';
 import { sandboxPath } from '../middleware/pathSandbox';
@@ -16,9 +15,11 @@ import { logger } from '../../utils/logger';
 
 const router = express.Router();
 
+ensureAppDataDirs();
+
 const upload = multer({
-  dest: path.join(__dirname, '..', '..', '..', 'tmp'),
-  limits: { fileSize: 10 * 1024 * 1024 * 1024 },
+  dest: env.tmpDir,
+  limits: { fileSize: env.uploadLimitBytes },
 });
 
 const progressClients: Set<express.Response> = new Set();
@@ -38,52 +39,6 @@ router.get('/progress', (_req, res) => {
 
   progressClients.add(res);
   _req.on('close', () => progressClients.delete(res));
-});
-
-router.post('/init', async (req, res) => {
-  try {
-    const { password } = req.body;
-
-    if (!password || typeof password !== 'string') {
-      res.status(400).json({ error: 'Password is required' });
-      return;
-    }
-
-    if (isVaultInitialized()) {
-      res.status(400).json({ error: 'Vault already initialized' });
-      return;
-    }
-
-    const validation = validatePassword(password);
-    if (!validation.isValid) {
-      res.status(400).json({ errors: validation.errors });
-      return;
-    }
-
-    ensureAppDataDirs();
-    await setupMasterPassword(password);
-
-    logger.info('Vault initialized via web UI');
-    res.json({ success: true, message: 'Vault created successfully' });
-  } catch (error) {
-    logger.error(`Init failed: ${(error as Error).message}`);
-    res.status(500).json({ error: (error as Error).message });
-  }
-});
-
-// Kept for backwards compatibility — clients can verify without creating a session
-router.post('/verify-password', async (req, res) => {
-  try {
-    const { password } = req.body;
-    if (!password) {
-      res.status(400).json({ error: 'Password is required' });
-      return;
-    }
-    const isValid = await verifyMasterPassword(password);
-    res.status(isValid ? 200 : 401).json({ valid: isValid });
-  } catch (error) {
-    res.status(500).json({ error: (error as Error).message });
-  }
 });
 
 // SEC-004: file encryption/decryption uses session auth — password never leaves login endpoint
@@ -242,9 +197,11 @@ router.post('/decrypt-dir', requireSession, async (req, res) => {
 
 router.get('/status', (_req, res) => {
   res.json({
-    vaultInitialized: isVaultInitialized(),
+    hasUsers: usersExist(),
+    registrationEnabled: env.enableRegistration,
+    webauthnEnabled: env.enableWebAuthn,
+    aiEnabled: env.enableAi,
     uptime: process.uptime(),
-    memory: process.memoryUsage(),
   });
 });
 

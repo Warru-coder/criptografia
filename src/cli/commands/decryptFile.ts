@@ -1,8 +1,8 @@
-import fs from 'fs';
+﻿import fs from 'fs';
 import path from 'path';
 import * as readline from 'readline';
 import { decryptFile, DecryptProgress } from '../../crypto/fileDecipher';
-import { getMasterKey, verifyMasterPassword, isVaultInitialized } from '../../passwordManager/secureStorage';
+import { getMasterKeyLegacy as getMasterKey, verifyMasterPasswordLegacy as verifyMasterPassword, isVaultInitializedLegacy as isVaultInitialized } from '../../passwordManager/secureStorage';
 import { getOutputPath } from '../../filesystem/fileScanner';
 import { createProgressBar } from '../progressBar';
 
@@ -75,3 +75,4 @@ export async function decryptFileCommand(options: {
     rl.close();
   }
 }
+

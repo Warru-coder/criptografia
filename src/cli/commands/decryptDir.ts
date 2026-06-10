@@ -1,8 +1,8 @@
-import fs from 'fs';
+﻿import fs from 'fs';
 import path from 'path';
 import * as readline from 'readline';
 import { decryptDirectory, DirectoryProgress } from '../../filesystem/directoryProcessor';
-import { getMasterKey, verifyMasterPassword, isVaultInitialized } from '../../passwordManager/secureStorage';
+import { getMasterKeyLegacy as getMasterKey, verifyMasterPasswordLegacy as verifyMasterPassword, isVaultInitializedLegacy as isVaultInitialized } from '../../passwordManager/secureStorage';
 import { createProgressBar } from '../progressBar';
 
 const rl = readline.createInterface({
@@ -90,3 +90,4 @@ export async function decryptDirCommand(options: {
     rl.close();
   }
 }
+

@@ -4,15 +4,20 @@
 
 | Capa | Tecnología | Versión | Justificación |
 |------|-----------|---------|---------------|
-| Runtime | Node.js | ≥ 18 LTS | Streams nativos, crypto module, soporte AES-NI |
+| Runtime | Node.js | ≥ 20 LTS | Streams nativos, crypto module, soporte AES-NI |
 | Lenguaje | TypeScript | 5.x | Tipado estático, NodeNext modules |
 | Web framework | Express | 4.x | Maduro, middleware ecosystem |
 | Cifrado | Node.js crypto | Built-in | AES-256-GCM nativo, sin dependencias externas |
-| KDF | argon2 npm | latest | Binding nativo Argon2id, rendimiento óptimo |
-| Seguridad HTTP | helmet | latest | Headers de seguridad automáticos |
-| Rate limiting | express-rate-limit | latest | Protección DoS básica |
-| Uploads | multer | latest | Streaming multipart |
-| Tests | Jest + ts-jest | latest | Integración TypeScript nativa |
+| KDF | argon2 npm | 0.40.x | Binding nativo Argon2id, rendimiento óptimo |
+| Base de datos | better-sqlite3 | 12.x | Síncrona, WAL mode, sin servidor |
+| Autenticación FIDO2 | @simplewebauthn/server | 13.x | Passkeys W3C WebAuthn Level 2 |
+| Configuración | dotenv | 17.x | Config desde .env, sin cambios de código |
+| Seguridad HTTP | helmet + cors | latest | Headers + CORS controlado |
+| Rate limiting | express-rate-limit | 7.x | Protección DoS, límite separado para login |
+| Uploads | multer | 1.4.x | Streaming multipart |
+| Logging | winston | 3.x | Rotación automática, JSON estructurado |
+| Tests | vitest | 2.x | Compatible con TypeScript ESM/CJS |
+| Contenedores | Docker + nginx | latest | Despliegue reproducible |
 
 ## 5.2 Módulo de cifrado (src/crypto/)
 
@@ -114,139 +119,163 @@ export async function decryptFile(...): Promise<void> {
 }
 ```
 
-## 5.3 Gestión de contraseñas (src/passwordManager/)
+## 5.3 Base de datos SQLite (src/database/)
 
-### 5.3.1 Almacenamiento seguro
+### 5.3.1 Esquema
+
+```sql
+CREATE TABLE users (
+  id          TEXT PRIMARY KEY,
+  username    TEXT UNIQUE NOT NULL,
+  passwordHash TEXT NOT NULL,   -- Argon2id hash
+  salt        TEXT NOT NULL,
+  wrappedKey  TEXT,             -- AES-256-GCM(masterKey, serverSecret) para WebAuthn
+  createdAt   TEXT NOT NULL,
+  lastLoginAt TEXT
+);
+
+CREATE TABLE sessions (
+  token     TEXT PRIMARY KEY,
+  userId    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expiresAt INTEGER NOT NULL,   -- ms since epoch
+  createdAt INTEGER NOT NULL
+);
+
+CREATE TABLE webauthn_credentials (
+  id           TEXT PRIMARY KEY,
+  userId       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  credentialId TEXT NOT NULL,   -- base64url
+  publicKey    TEXT NOT NULL,   -- base64
+  counter      INTEGER NOT NULL,
+  deviceType   TEXT NOT NULL,
+  backedUp     INTEGER NOT NULL,
+  createdAt    TEXT NOT NULL
+);
+```
+
+### 5.3.2 Sesiones híbridas
+
+Los tokens de sesión se persisten en SQLite con `(token, userId, expiresAt)`. La clave maestra **nunca** se guarda en disco — solo vive en un `Map<string, { masterKey, userId }>` en memoria. Tras un reinicio del servidor, los tokens en SQLite son inválidos funcionalmente porque la clave no está en memoria: el usuario debe hacer login de nuevo.
+
+## 5.4 Gestión de contraseñas (src/passwordManager/)
+
+### 5.4.1 Vault por usuario
+
+Cada usuario tiene su vault en `{dataDir}/users/{userId}/vault/master.hash` con el hash Argon2id de su contraseña. El hash permite:
+1. **Verificar** la contraseña sin almacenarla
+2. **Derivar** la clave maestra (re-ejecutando Argon2id con el mismo salt)
 
 ```typescript
 // src/passwordManager/secureStorage.ts
-export async function setupMasterPassword(password: string): Promise<void> {
-  const salt = crypto.randomBytes(32);
-  const hash = await argon2.hash(password, {
-    type: argon2.argon2id,
-    salt,
-    memoryCost: 65536,
-    timeCost: 3,
-    parallelism: 2,
-    hashLength: 32,
-  });
-
-  // Almacenar salt + hash en ~/.securecrypt/hash.dat
-  const data = JSON.stringify({
-    salt: salt.toString('hex'),
-    hash: hash,
-    version: 1,
-  });
-  await fs.promises.writeFile(HASH_FILE, data, { mode: 0o600 });
+export async function setupMasterPassword(userId: string, password: string): Promise<void> {
+  const { hash, salt } = await deriveKeyForStorage(password);
+  const record = {
+    algorithm: 'argon2id',
+    version: 19,
+    params: { memoryCost: 65536, timeCost: 3, parallelism: 2 },
+    hash,
+    salt: salt.toString('base64'),
+    createdAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(vaultFilePath(userId), JSON.stringify(record, null, 2), 'utf-8');
 }
 ```
 
-**Propiedad de seguridad**: El archivo `hash.dat` nunca contiene la contraseña en texto claro ni la clave maestra. El hash Argon2id es computacionalmente costoso de verificar por fuerza bruta (~300ms por intento en hardware moderno).
-
-### 5.3.2 Derivación de la clave maestra
-
-```typescript
-export async function getMasterKey(password: string): Promise<Buffer> {
-  const { salt } = readHashFile();
-  const key = await argon2.hash(password, {
-    type: argon2.argon2id,
-    salt: Buffer.from(salt, 'hex'),
-    memoryCost: 65536,
-    timeCost: 3,
-    parallelism: 2,
-    hashLength: 32,
-    raw: true, // devuelve Buffer, no string
-  });
-  return key as Buffer;
-}
-```
-
-**Importante**: `getMasterKey` solo se llama en `authRoutes.ts` durante el login. La clave maestra se almacena en memoria únicamente durante la vida de la sesión (SessionStore) y se limpia al hacer logout o expirar la sesión.
-
-## 5.4 Sesiones y autenticación (src/web/session/)
-
-### 5.4.1 SessionStore en memoria
+### 5.4.2 Sesiones híbridas (SQLite + memoria)
 
 ```typescript
 // src/web/session/sessionStore.ts
-interface Session {
-  masterKey: Buffer;
-  createdAt: number;
-  lastUsed: number;
-}
-
-const store = new Map<string, Session>();
-export const SESSION_TTL_MS = 30 * 60_000; // 30 min
-
-export function createSession(masterKey: Buffer): string {
-  const token = crypto.randomBytes(32).toString('hex'); // 256-bit entropy
-  store.set(token, { masterKey, createdAt: Date.now(), lastUsed: Date.now() });
+export function createSession(masterKey: Buffer, userId: string): string {
+  const token = crypto.randomBytes(32).toString('hex'); // 256 bits
+  persistSession(token, userId);             // SQLite: token, userId, expiresAt
+  mem.set(token, { masterKey: Buffer.from(masterKey), userId }); // RAM: clave
   return token;
 }
 
 export function getSession(token: string): Session | undefined {
-  const session = store.get(token);
-  if (!session) return undefined;
-  if (Date.now() - session.lastUsed > SESSION_TTL_MS) {
-    session.masterKey.fill(0); // limpiar clave de memoria
-    store.delete(token);
+  const entry = mem.get(token);
+  if (!entry) return undefined;
+  if (!touchSession(token)) {    // SQLite: verificar + deslizar TTL
+    entry.masterKey.fill(0);
+    mem.delete(token);
     return undefined;
   }
-  session.lastUsed = Date.now(); // sliding TTL
-  return session;
+  return entry;
 }
 ```
 
 **Propiedades de seguridad**:
-- Token de 64 caracteres hex = 256 bits de entropía (imposible adivinar por fuerza bruta)
-- TTL deslizante: la sesión se extiende con cada request, expira por inactividad
-- La clave maestra se borra de memoria (`fill(0)`) al expirar la sesión
-- Sin persistencia en disco (reiniciar servidor invalida todas las sesiones)
+- Token de 256 bits de entropía
+- TTL deslizante por cada request (default 30 min, configurable)
+- Clave maestra nunca sale de RAM
+- `masterKey.fill(0)` al expirar o hacer logout
 
 ## 5.5 Middleware de seguridad
 
 ### 5.5.1 requireSession
 
 ```typescript
-// src/web/middleware/requireSession.ts
 export function requireSession(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Authentication required' });
-    return;
+    res.status(401).json({ error: 'Authentication required' }); return;
   }
-  const token = authHeader.slice(7);
-  const session = getSession(token);
+  const session = getSession(authHeader.slice(7));
   if (!session) {
-    res.status(401).json({ error: 'Invalid or expired session' });
-    return;
+    res.status(401).json({ error: 'Session expired or invalid' }); return;
   }
   req.masterKey = session.masterKey;
+  req.userId = session.userId;
   next();
 }
 ```
 
-### 5.5.2 pathSandbox — Protección contra path traversal
+### 5.5.2 pathSandbox — Protección contra path traversal (SEC-001)
 
 ```typescript
-// src/web/middleware/pathSandbox.ts
-const BASE_DIR = path.resolve(process.env.SECURECRYPT_BASE_DIR ?? os.homedir());
+// BASE_DIR leído de env.dataDir (configurable en .env)
+const BASE_DIR = path.resolve(env.dataDir);
 
 export function sandboxPath(userInput: string): string {
   const resolved = path.resolve(userInput);
-  // Verificar que la ruta esté DENTRO del directorio base
   if (resolved !== BASE_DIR && !resolved.startsWith(BASE_DIR + path.sep)) {
-    throw new ForbiddenPathError(
-      `Path '${userInput}' is outside the allowed base directory`
-    );
+    throw new ForbiddenPathError(`Access denied: path outside ${BASE_DIR}`);
   }
   return resolved;
 }
 ```
 
-**Vulnerabilidad original**: El código pre-Fase 0 pasaba `inputPath` directamente a `fs.existsSync()` y `encryptDirectory()` sin validación. Esto permitía a un atacante autenticado cifrar o descifrar cualquier directorio del sistema.
+**Corrección SEC-001**: `path.resolve()` normaliza `..` y symlinks antes de la comprobación de prefijo. Sin esta función, un atacante autenticado podría cifrar `/etc/passwd` enviando `../../etc/passwd`.
 
-**Corrección**: Toda ruta recibida del cliente pasa por `sandboxPath()` antes de cualquier operación de filesystem. `path.resolve()` elimina los segmentos `..` y symlinks, y la comprobación de prefijo garantiza que la ruta resultante esté dentro del directorio base.
+### 5.5.3 Rate limiting en autenticación
+
+```typescript
+// server.ts — límite más estricto para /api/auth/
+app.use('/api/auth/', rateLimit({
+  windowMs: env.rateLimitWindowMs,  // default: 15 min
+  max: env.loginRateLimitMax,       // default: 10 intentos
+  skip: (req) => req.path === '/logout',
+}));
+```
+
+Configuración separada para login/register (10 req/15min) vs API general (100 req/15min).
+
+### 5.5.4 WebAuthn (FIDO2)
+
+Registro de passkey vinculado a una sesión de contraseña activa. La clave maestra se envuelve con `SERVER_SECRET` (AES-256-GCM) y se guarda en `users.wrappedKey`:
+
+```typescript
+function wrapMasterKey(masterKey: Buffer): string {
+  const secret = Buffer.from(env.serverSecret.padEnd(32,'0').slice(0,32));
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', secret, iv);
+  const enc = Buffer.concat([cipher.update(masterKey), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, enc]).toString('base64'); // iv(12)+tag(16)+enc
+}
+```
+
+En login posterior con passkey, `unwrapMasterKey()` recupera la clave maestra sin pedir contraseña.
 
 ## 5.6 Tests unitarios
 

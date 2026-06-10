@@ -6,6 +6,7 @@ declare global {
   namespace Express {
     interface Request {
       masterKey: Buffer;
+      userId: string;
     }
   }
 }
@@ -25,5 +26,6 @@ export function requireSession(req: Request, res: Response, next: NextFunction):
   }
 
   req.masterKey = session.masterKey;
+  req.userId = session.userId;
   next();
 }

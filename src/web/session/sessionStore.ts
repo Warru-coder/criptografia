@@ -1,55 +1,78 @@
 import crypto from 'crypto';
+import { env } from '../../config';
+import {
+  persistSession,
+  touchSession,
+  deleteSession as dbDeleteSession,
+  deleteUserSessions as dbDeleteUserSessions,
+  pruneExpiredSessions,
+} from '../../database/sessionRepository';
 
-export const SESSION_TTL_MS =
-  parseInt(process.env.SESSION_TIMEOUT_MINUTES ?? '30', 10) * 60_000;
-
-interface Session {
+// In-memory store: only holds the master key (never persisted to disk)
+interface MemEntry {
   masterKey: Buffer;
-  expiresAt: number;
+  userId: string;
 }
 
-const sessions = new Map<string, Session>();
+const mem = new Map<string, MemEntry>();
 
+// Purge expired sessions from DB and memory every minute
 const cleanup = setInterval(() => {
-  const now = Date.now();
-  for (const [token, session] of sessions) {
-    if (session.expiresAt <= now) {
-      session.masterKey.fill(0);
-      sessions.delete(token);
+  pruneExpiredSessions();
+  for (const token of mem.keys()) {
+    if (!touchSession(token)) {
+      const entry = mem.get(token);
+      if (entry) entry.masterKey.fill(0);
+      mem.delete(token);
     }
   }
 }, 60_000);
-
 cleanup.unref();
 
-export function createSession(masterKey: Buffer): string {
+export function createSession(masterKey: Buffer, userId: string): string {
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, {
-    masterKey: Buffer.from(masterKey),
-    expiresAt: Date.now() + SESSION_TTL_MS,
-  });
+  persistSession(token, userId);
+  mem.set(token, { masterKey: Buffer.from(masterKey), userId });
   return token;
 }
 
-export function getSession(token: string): Session | undefined {
-  const session = sessions.get(token);
-  if (!session) return undefined;
+export interface Session {
+  masterKey: Buffer;
+  userId: string;
+}
 
-  const now = Date.now();
-  if (session.expiresAt <= now) {
-    session.masterKey.fill(0);
-    sessions.delete(token);
+export function getSession(token: string): Session | undefined {
+  const entry = mem.get(token);
+  if (!entry) return undefined;
+
+  // Verify + slide expiry in DB
+  if (!touchSession(token)) {
+    entry.masterKey.fill(0);
+    mem.delete(token);
     return undefined;
   }
 
-  session.expiresAt = now + SESSION_TTL_MS;
-  return session;
+  return entry;
 }
 
 export function deleteSession(token: string): void {
-  const session = sessions.get(token);
-  if (session) {
-    session.masterKey.fill(0);
-    sessions.delete(token);
+  const entry = mem.get(token);
+  if (entry) {
+    entry.masterKey.fill(0);
+    mem.delete(token);
   }
+  dbDeleteSession(token);
 }
+
+export function deleteUserSessions(userId: string): void {
+  for (const [token, entry] of mem.entries()) {
+    if (entry.userId === userId) {
+      entry.masterKey.fill(0);
+      mem.delete(token);
+    }
+  }
+  dbDeleteUserSessions(userId);
+}
+
+// Kept for backwards compatibility
+export const SESSION_TTL_MS = env.sessionTtlMs;

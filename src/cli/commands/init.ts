@@ -1,7 +1,7 @@
 import * as readline from 'readline';
-import { setupMasterPassword, isVaultInitialized } from '../../passwordManager/secureStorage';
+import { setupMasterPasswordLegacy as setupMasterPassword, isVaultInitializedLegacy as isVaultInitialized } from '../../passwordManager/secureStorage';
 import { validatePassword, getPasswordStrength } from '../../passwordManager/passwordValidator';
-import { ensureAppDataDirs } from '../../core/appConfig';
+import { ensureAppDataDirs } from '../../config';
 
 const rl = readline.createInterface({
   input: process.stdin,

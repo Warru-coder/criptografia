@@ -1,13 +1,9 @@
 import winston from 'winston';
 import path from 'path';
-import os from 'os';
 import fs from 'fs';
+import { env } from '../config';
 
-const logDir = path.join(os.homedir(), 'Desktop', 'AppSecureData', 'logs');
-
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
-}
+if (!fs.existsSync(env.logDir)) fs.mkdirSync(env.logDir, { recursive: true });
 
 export const logger = winston.createLogger({
   level: 'info',
@@ -19,14 +15,14 @@ export const logger = winston.createLogger({
   defaultMeta: { service: 'securecrypt' },
   transports: [
     new winston.transports.File({
-      filename: path.join(logDir, 'secure.log'),
+      filename: path.join(env.logDir, 'secure.log'),
       maxsize: 5 * 1024 * 1024,
       maxFiles: 3,
     }),
   ],
 });
 
-if (process.env.NODE_ENV !== 'production') {
+if (env.nodeEnv !== 'production') {
   logger.add(
     new winston.transports.Console({
       format: winston.format.combine(

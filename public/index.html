@@ -21,55 +21,77 @@
       </div>
     </header>
 
-    <div id="setupPanel" class="panel hidden">
+    <!-- Register Panel (shown when no users exist and registration is enabled) -->
+    <div id="registerPanel" class="panel hidden">
       <div class="panel-header">
         <span class="panel-icon">&#x1F512;</span>
-        <h2>Initialize Vault</h2>
+        <h2>Create Account</h2>
       </div>
-      <p class="panel-desc">Create a master password to secure your files.</p>
-      <form id="setupForm">
+      <p class="panel-desc">Create your account to secure your files with AES-256-GCM.</p>
+      <form id="registerForm">
         <div class="form-group">
-          <label for="setupPassword">Master Password</label>
-          <input type="password" id="setupPassword" required minlength="8" placeholder="Min 8 characters" autocomplete="new-password">
+          <label for="registerUsername">Username</label>
+          <input type="text" id="registerUsername" required minlength="3" placeholder="Choose a username" autocomplete="username">
           <div class="input-glow"></div>
         </div>
         <div class="form-group">
-          <label for="setupConfirm">Confirm Password</label>
-          <input type="password" id="setupConfirm" required placeholder="Confirm password" autocomplete="new-password">
+          <label for="registerPassword">Master Password</label>
+          <input type="password" id="registerPassword" required minlength="8" placeholder="Min 8 characters" autocomplete="new-password">
+          <div class="input-glow"></div>
+        </div>
+        <div class="form-group">
+          <label for="registerConfirm">Confirm Password</label>
+          <input type="password" id="registerConfirm" required placeholder="Confirm password" autocomplete="new-password">
           <div class="input-glow"></div>
         </div>
         <div id="passwordStrength" class="strength-indicator"></div>
         <button type="submit" class="btn btn-primary">
-          <span class="btn-icon">&#x26A1;</span> Create Vault
+          <span class="btn-icon">&#x26A1;</span> Create Account
         </button>
+        <p class="auth-switch">Already have an account? <a href="#" id="switchToLogin">Sign in</a></p>
       </form>
     </div>
 
+    <!-- Login Panel -->
     <div id="loginPanel" class="panel hidden">
       <div class="panel-header">
         <span class="panel-icon">&#x1F513;</span>
-        <h2>Unlock Vault</h2>
+        <h2>Sign In</h2>
       </div>
       <form id="loginForm">
+        <div class="form-group">
+          <label for="loginUsername">Username</label>
+          <input type="text" id="loginUsername" required placeholder="Your username" autocomplete="username">
+          <div class="input-glow"></div>
+        </div>
         <div class="form-group">
           <label for="loginPassword">Master Password</label>
           <input type="password" id="loginPassword" required placeholder="Enter master password" autocomplete="current-password">
           <div class="input-glow"></div>
         </div>
         <button type="submit" class="btn btn-primary">
-          <span class="btn-icon">&#x1F511;</span> Unlock
+          <span class="btn-icon">&#x1F511;</span> Sign In
         </button>
+        <div id="passkeySection" class="passkey-section hidden">
+          <div class="auth-divider"><span>or</span></div>
+          <button type="button" id="passkeyLoginBtn" class="btn btn-passkey">
+            <span class="btn-icon">&#x1F5DD;</span> Sign in with Passkey
+          </button>
+        </div>
+        <p class="auth-switch" id="switchToRegisterWrap">No account? <a href="#" id="switchToRegister">Create one</a></p>
       </form>
     </div>
 
+    <!-- Main App Panel -->
     <div id="mainPanel" class="panel hidden">
       <div class="toolbar">
         <div class="toolbar-left">
           <span id="statusIndicator" class="status">
-            <span class="status-dot"></span> Unlocked
+            <span class="status-dot"></span> <span id="loggedInUser">Unlocked</span>
           </span>
         </div>
         <div class="toolbar-actions">
+          <button id="registerPasskeyBtn" class="btn btn-secondary hidden">Register Passkey</button>
           <button id="showAiBtn" class="btn btn-secondary">AI Advisor</button>
           <button id="showDirBtn" class="btn btn-secondary">Directory Mode</button>
           <button id="logoutBtn" class="btn btn-secondary">Lock</button>
@@ -81,14 +103,13 @@
         <div class="ai-panel-header">
           <span class="panel-icon">&#x1F9E0;</span>
           <h3>AI Crypto Advisor</h3>
-          <span id="aiStatusBadge" class="ai-status-badge ai-offline">○ Checking...</span>
+          <span id="aiStatusBadge" class="ai-status-badge ai-offline">&#x25CB; Checking...</span>
         </div>
         <div class="ai-tabs">
           <button class="ai-tab-btn active" data-tab="auditor">Config Auditor</button>
           <button class="ai-tab-btn" data-tab="chat">Chat Assistant</button>
         </div>
 
-        <!-- Auditor Tab -->
         <div id="auditorTab" class="ai-tab-content">
           <p class="panel-desc">Paste your cryptographic configuration as JSON to get a security audit against OWASP/NIST standards.</p>
           <div class="form-group">
@@ -101,7 +122,6 @@
           <div id="auditResults" class="audit-results hidden"></div>
         </div>
 
-        <!-- Chat Tab -->
         <div id="chatTab" class="ai-tab-content hidden">
           <div id="chatHistory" class="chat-history"></div>
           <div class="chat-input-row">
@@ -119,7 +139,7 @@
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            <p>Drag & drop files here or click to select</p>
+            <p>Drag &amp; drop files here or click to select</p>
             <input type="file" id="fileInput" multiple hidden>
           </div>
         </div>
@@ -131,8 +151,7 @@
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
             </svg>
-            <p>Directory mode: select a folder to encrypt/decrypt</p>
-            <p class="hint">Note: Use the CLI for directory operations: <code>securecrypt encrypt dir -i &lt;path&gt;</code></p>
+            <p>Directory mode: enter a server-side folder path below</p>
           </div>
         </div>
         <div class="dir-controls">

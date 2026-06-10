@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { getAppDataPath } from '../core/appConfig';
+import { getAppDataPath } from '../config';
 
 export interface Checkpoint {
   operationId: string;

@@ -1,8 +1,8 @@
 import path from 'path';
-import os from 'os';
+import { env } from '../../config';
 import { ForbiddenPathError } from '../../core/errorHandler';
 
-const BASE_DIR = path.resolve(process.env.SECURECRYPT_BASE_DIR ?? os.homedir());
+const BASE_DIR = path.resolve(env.dataDir);
 
 export function sandboxPath(userInput: string): string {
   const resolved = path.resolve(userInput);
@@ -10,7 +10,7 @@ export function sandboxPath(userInput: string): string {
 
   if (resolved !== BASE_DIR && !resolved.startsWith(base)) {
     throw new ForbiddenPathError(
-      `Access denied: path is outside the allowed directory. Set SECURECRYPT_BASE_DIR to change it.`
+      `Access denied: path is outside the allowed directory (${BASE_DIR}).`
     );
   }
 
