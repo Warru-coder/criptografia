@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { apiRoutes } from './routes/apiRoutes';
+import { authRoutes } from './routes/authRoutes';
 import { pageRoutes } from './routes/pageRoutes';
 import { errorMiddleware } from './middleware/errorMiddleware';
 import { logger } from '../utils/logger';
@@ -34,6 +35,7 @@ export function createServer(): express.Application {
   app.use(express.static(path.join(__dirname, '..', '..', 'public')));
 
   app.use('/', pageRoutes);
+  app.use('/api/auth', authRoutes);
   app.use('/api', apiRoutes);
 
   app.use(errorMiddleware);

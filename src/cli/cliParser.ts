@@ -13,7 +13,7 @@ export function createCliParser(): Command {
   program
     .name('securecrypt')
     .description('Secure file encryption/decryption application')
-    .version('0.2.0');
+    .version('0.3.0');
 
   program
     .command('init')

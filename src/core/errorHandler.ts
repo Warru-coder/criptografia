@@ -35,3 +35,10 @@ export class ValidationError extends SecureCryptError {
     this.name = 'ValidationError';
   }
 }
+
+export class ForbiddenPathError extends SecureCryptError {
+  constructor(message: string) {
+    super(message, 'FORBIDDEN_PATH');
+    this.name = 'ForbiddenPathError';
+  }
+}

@@ -12,7 +12,8 @@ export const ARGON2_PARALLELISM = 2;
 export const ARGON2_HASH_LENGTH = 32;
 
 export const STREAM_HIGH_WATER_MARK = 64 * 1024;
-export const DEFAULT_CONCURRENCY = Math.max(1, require('os').cpus().length - 1);
+import { cpus } from 'os';
+export const DEFAULT_CONCURRENCY = Math.max(1, cpus().length - 1);
 export const MAX_QUEUE_SIZE = 10000;
 
 export const SYSTEM_EXCLUSIONS = [

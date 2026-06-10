@@ -16,3 +16,14 @@ AppSecureData/
 
 # Build artifacts
 *.tsbuildinfo
+
+# Test artifacts — never commit real files
+prueba/
+tmp/
+*.scrypt
+*.decrypted
+*.encrypted
+
+# Duplicate docs
+"README - copia.md"
+README\ -\ copia.md

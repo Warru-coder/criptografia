@@ -9,6 +9,14 @@ export function errorMiddleware(
 ): void {
   logger.error(`Unhandled error: ${err.message}`);
 
+  if (err.name === 'ForbiddenPathError') {
+    res.status(403).json({
+      error: err.message,
+      code: (err as { code?: string }).code,
+    });
+    return;
+  }
+
   if (err.name === 'SecureCryptError') {
     res.status(400).json({
       error: err.message,
