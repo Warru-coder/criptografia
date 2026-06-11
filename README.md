@@ -14,10 +14,9 @@
 
 SecureCrypt es una suite de cifrado de archivos de nivel profesional que combina criptografía moderna (AES-256-GCM + Argon2id) con inteligencia artificial para proporcionar no solo cifrado seguro, sino también **auditoría automática de configuraciones** y un **asistente experto en criptografía** basado en RAG.
 
-El proyecto está disponible en tres plataformas:
+El proyecto está disponible en dos plataformas:
 - **CLI + API REST** (Node.js/TypeScript) — para scripting, automatización e integración
 - **Aplicación de escritorio** (C++20/Win32) — para Windows, con características de seguridad avanzadas del sistema operativo
-- **Aplicación móvil** (Android/Kotlin + Jetpack Compose) — con autenticación biométrica y Android Keystore
 
 ---
 
@@ -57,7 +56,6 @@ SecureCrypt resuelve esto con una interfaz accesible, cifrado correctamente impl
 ### Seguridad del Sistema
 - Comparaciones de hashes en tiempo constante (anti timing-attack)
 - Windows: ASLR, DEP, CFG (Control Flow Guard), DPAPI, `SecureZeroMemory`, AntiDebug
-- Android: Android Keystore Hardware-backed, autenticación biométrica BIOMETRIC_STRONG, SQLCipher
 
 ---
 
@@ -96,7 +94,6 @@ Ver [Arquitectura Completa](docs/architecture/clean-architecture.md) para diagra
 | Runtime principal | Node.js + TypeScript | ≥20, 5.7 |
 | Criptografía (Node) | AES-256-GCM (built-in) + argon2 | 0.40.3 |
 | Criptografía (Windows) | Windows CNG (BCrypt) + DPAPI | Sistema |
-| Criptografía (Android) | Android Keystore + SQLCipher | API 26+ |
 | API REST | Express + Zod + Helmet | 4.21, 3.24, 8.0 |
 | Rate limiting | express-rate-limit | 7.5 |
 | Base de datos | SQLite | 3.x |
@@ -105,8 +102,6 @@ Ver [Arquitectura Completa](docs/architecture/clean-architecture.md) para diagra
 | Tests | Vitest + JUnit4 + Mockk | 2.1.8 |
 | CI/CD | GitHub Actions | — |
 | Empaquetado | @yao-pkg/pkg (genera .exe) | — |
-| Android UI | Jetpack Compose | BOM 2024.02 |
-| Android DI | Hilt | 2.50 |
 | Windows Build | C++20 + MSVC + CMake | 3.20+ |
 
 ---
@@ -122,10 +117,6 @@ Ver [Arquitectura Completa](docs/architecture/clean-architecture.md) para diagra
 - Windows 10 64-bit o superior (Windows 11 recomendado)
 - Visual Studio 2022 con workload "Desktop development with C++"
 - CMake 3.20 o superior
-
-### Aplicación Android
-- Android Studio Hedgehog (2023.1.1) o superior
-- Android SDK API 26 (Android 8.0) mínimo, API 34 para compilar
 
 ---
 
@@ -334,12 +325,6 @@ securecrypt/
 │   │   ├── ui/                      # Win32 UI, dialogs
 │   │   └── storage/                 # SQLite + SQLCipher
 │   └── tests/unit/test_crypto.cpp   # 16 tests unitarios C++
-├── criptografia-app-android/        # Aplicación Android (Kotlin)
-│   └── app/src/main/java/com/securecrypt/android/
-│       ├── core/security/           # EncryptionService, KeystoreManager
-│       ├── presentation/            # Compose UI + ViewModels
-│       ├── di/                      # Hilt AppModule
-│       └── database/                # Room + SQLCipher
 ├── docs/                            # Documentación completa
 │   ├── analysis/audit.md            # Auditoría técnica completa
 │   ├── architecture/                # Decisiones de diseño
@@ -456,7 +441,7 @@ Ver [Estrategia de Testing Completa](docs/testing/testing-strategy.md).
 
 | Versión | Estado | Descripción |
 |---|---|---|
-| v0.3.0 | ✅ Actual | CLI + API + Windows + Android funcionales |
+| v0.3.0 | ✅ Actual | CLI + API + Windows funcionales |
 | v0.4.0 | 🔄 Julio 2026 | Corrección issues de seguridad críticos |
 | v0.5.0 | ✅ v0.3.0 | IA integrada: auditor, asistente RAG, clasificador de archivos |
 | v1.0.0 | 🔄 2027 | Versión comercial con API pública |
@@ -515,7 +500,6 @@ Email: gabideltoya@gmail.com
 |---|---|
 | Funcionalidad principal (CLI/API) | ✅ Estable |
 | Aplicación Windows | ✅ Funcional |
-| Aplicación Android | 🔄 Trabajo futuro (fuera del scope v0.3.0) |
 | Tests | ⚠️ En progreso (45% → objetivo 80%) |
 | Seguridad (issues conocidos) | ⚠️ Correcciones en progreso ([detalle](docs/security/security-audit.md)) |
 | Integración IA en producto | 🔄 En desarrollo |
