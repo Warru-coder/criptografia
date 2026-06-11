@@ -458,7 +458,7 @@ Ver [Estrategia de Testing Completa](docs/testing/testing-strategy.md).
 |---|---|---|
 | v0.3.0 | ✅ Actual | CLI + API + Windows + Android funcionales |
 | v0.4.0 | 🔄 Julio 2026 | Corrección issues de seguridad críticos |
-| v0.5.0 | 🔄 Agosto 2026 | IA integrada en producto (auditor + RAG) |
+| v0.5.0 | ✅ v0.3.0 | IA integrada: auditor, asistente RAG, clasificador de archivos |
 | v1.0.0 | 🔄 2027 | Versión comercial con API pública |
 
 Ver [Roadmap Completo](docs/roadmap/roadmap.md).
