@@ -1,10 +1,10 @@
 import { loadConfig, saveConfig, defaultConfig, AppConfig } from '../../config';
 
-export async function configCommand(options: {
+export function configCommand(options: {
   action?: string;
   key?: string;
   value?: string;
-}): Promise<void> {
+}): void {
   const action = options.action || 'get';
   const config = loadConfig();
 
@@ -26,7 +26,7 @@ export async function configCommand(options: {
       }
       break;
 
-    case 'set':
+    case 'set': {
       if (!options.key || options.value === undefined) {
         console.error('Usage: securecrypt config set <key> <value>');
         process.exit(1);
@@ -56,6 +56,7 @@ export async function configCommand(options: {
       saveConfig(config);
       console.log(`Set ${key} = ${config[key]}`);
       break;
+    }
 
     case 'reset':
       saveConfig(defaultConfig);

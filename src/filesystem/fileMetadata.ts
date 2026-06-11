@@ -147,13 +147,13 @@ export async function readHeader(filePath: string): Promise<FileHeader> {
   };
 }
 
-export async function writeMetadata(
+export function writeMetadata(
   originalPath: string,
   encryptedPath: string,
   salt: Buffer,
   iv: Buffer,
   originalSize: number
-): Promise<void> {
+): void {
   const metadataDir = path.join(getAppDataPath(), 'metadata');
 
   if (!fs.existsSync(metadataDir)) {

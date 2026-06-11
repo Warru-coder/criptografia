@@ -67,7 +67,6 @@ export const env = {
 
 // Warn in production if SERVER_SECRET is not set
 if (env.nodeEnv === 'production' && !env.serverSecret) {
-  // eslint-disable-next-line no-console
   console.error('[SecureCrypt] FATAL: SERVER_SECRET must be set in production. Exiting.');
   process.exit(1);
 }

@@ -28,6 +28,7 @@ export interface Finding {
   reference: string;
   currentValue?: string;
   expectedValue?: string;
+  explanation?: string;
 }
 
 export interface AuditResult {
@@ -189,6 +190,32 @@ function scoreToRisk(score: number): RiskLevel {
   return 'critical';
 }
 
+async function enrichFindingsWithExplanations(findings: Finding[]): Promise<void> {
+  const systemPrompt = `Eres un experto en criptografía. Para cada hallazgo de seguridad, explica en 2-3 frases concisas el riesgo real para el mundo real (ataques concretos, consecuencias prácticas). Responde en español. Sé directo y técnico.`;
+
+  const list = findings
+    .map(f => `ID: ${f.id}\nHallazgo: ${f.title}\nDescripción técnica: ${f.description}\nValor actual: ${f.currentValue ?? 'no especificado'}`)
+    .join('\n\n---\n\n');
+
+  const prompt = `Para cada uno de los siguientes hallazgos de seguridad, genera una explicación del riesgo real en 2-3 frases. Formato de respuesta: devuelve exactamente un bloque JSON con la estructura: {"explicaciones": [{"id": "<ID>", "explicacion": "<texto>"}]}\n\nHallazgos:\n${list}`;
+
+  try {
+    const raw = await chat([{ role: 'user', content: prompt }], systemPrompt);
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return;
+
+    const parsed = JSON.parse(jsonMatch[0]) as { explicaciones: Array<{ id: string; explicacion: string }> };
+    const map = new Map(parsed.explicaciones.map(e => [e.id, e.explicacion]));
+
+    for (const finding of findings) {
+      const expl = map.get(finding.id);
+      if (expl) finding.explanation = expl;
+    }
+  } catch {
+    // explanations are optional — silently ignore failures
+  }
+}
+
 export async function auditConfig(config: CryptoConfig): Promise<AuditResult> {
   const findings: Finding[] = [];
 
@@ -242,6 +269,10 @@ export async function auditConfig(config: CryptoConfig): Promise<AuditResult> {
       aiAnalysis = await chat([{ role: 'user', content: userMessage }], systemPrompt);
     } catch {
       aiAnalysis = undefined;
+    }
+
+    if (findings.length > 0) {
+      await enrichFindingsWithExplanations(findings);
     }
   }
 

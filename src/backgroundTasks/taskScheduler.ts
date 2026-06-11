@@ -24,11 +24,11 @@ export class TaskScheduler {
     this.retryDelay = options?.retryDelay || 1000;
   }
 
-  async schedule(task: Task): Promise<void> {
-    await this.queue.add(task);
+  schedule(task: Task): void {
+    this.queue.add(task);
   }
 
-  async scheduleWithRetry(task: Task, retries?: number): Promise<void> {
+  scheduleWithRetry(task: Task, retries?: number): void {
     const maxRetries = retries ?? this.maxRetries;
     let attempt = 0;
 
@@ -51,7 +51,7 @@ export class TaskScheduler {
       },
     };
 
-    await this.queue.add(retryableTask);
+    this.queue.add(retryableTask);
   }
 
   pause(taskId?: string): void {

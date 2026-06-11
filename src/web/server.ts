@@ -103,7 +103,7 @@ function setupGracefulShutdown(serverInstance: http.Server): void {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('uncaughtException', (error) => logger.error(`Uncaught exception: ${error.message}`));
-  process.on('unhandledRejection', (reason) => logger.error(`Unhandled rejection: ${reason}`));
+  process.on('unhandledRejection', (reason) => logger.error(`Unhandled rejection: ${String(reason)}`));
 }
 
 export function getServer(): http.Server | null { return server; }

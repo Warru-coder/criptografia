@@ -66,7 +66,7 @@ export async function encryptFile(
   const authTag = cipher.getAuthTag();
   fs.appendFileSync(outputPath, authTag);
 
-  await writeMetadata(inputPath, outputPath, salt, iv, totalSize);
+  writeMetadata(inputPath, outputPath, salt, iv, totalSize);
 
   secureClear(fileKey);
   cipher.destroy();

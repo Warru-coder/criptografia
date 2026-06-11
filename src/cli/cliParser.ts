@@ -71,7 +71,7 @@ export function createCliParser(): Command {
     .command('verify')
     .description('Verify file integrity')
     .requiredOption('-i, --input <path>', 'Encrypted file path')
-    .action(async (options) => {
+    .action((options) => {
       console.log(`Verifying: ${options.input}`);
       console.log('Integrity check passed.');
     });
@@ -94,8 +94,8 @@ export function createCliParser(): Command {
     .command('get')
     .description('Show current configuration')
     .option('-k, --key <key>', 'Show specific key')
-    .action(async (opts) => {
-      await configCommand({ action: 'get', key: opts.key });
+    .action((opts) => {
+      configCommand({ action: 'get', key: opts.key });
     });
 
   config
@@ -103,15 +103,15 @@ export function createCliParser(): Command {
     .description('Set a configuration value')
     .argument('<key>', 'Configuration key')
     .argument('<value>', 'Configuration value')
-    .action(async (key, value) => {
-      await configCommand({ action: 'set', key, value });
+    .action((key, value) => {
+      configCommand({ action: 'set', key, value });
     });
 
   config
     .command('reset')
     .description('Reset configuration to defaults')
-    .action(async () => {
-      await configCommand({ action: 'reset' });
+    .action(() => {
+      configCommand({ action: 'reset' });
     });
 
   return program;

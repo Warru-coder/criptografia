@@ -32,7 +32,7 @@ export class TaskQueue {
     this.maxQueueSize = options?.maxQueueSize || 10000;
   }
 
-  async add(task: Task): Promise<void> {
+  add(task: Task): void {
     if (this.queue.length + this.running.size >= this.maxQueueSize) {
       throw new Error('Task queue is full');
     }
@@ -40,10 +40,10 @@ export class TaskQueue {
     this.queue.push(task);
     this.queue.sort((a, b) => b.priority - a.priority);
 
-    await this.processQueue();
+    this.processQueue();
   }
 
-  private async processQueue(): Promise<void> {
+  private processQueue(): void {
     while (this.queue.length > 0 && this.running.size < this.concurrency && !this.paused) {
       const task = this.queue.shift();
       if (!task) break;
@@ -52,7 +52,7 @@ export class TaskQueue {
       task.status = 'running';
       task.startedAt = new Date();
 
-      this.executeTask(task);
+      void this.executeTask(task);
     }
   }
 
@@ -69,7 +69,7 @@ export class TaskQueue {
     } finally {
       this.running.delete(task.id);
       this.completed.set(task.id, task);
-      await this.processQueue();
+      this.processQueue();
     }
   }
 
@@ -92,7 +92,7 @@ export class TaskQueue {
       const task = this.running.get(taskId);
       if (task && task.status === 'paused') {
         task.status = 'running';
-        this.executeTask(task);
+        void this.executeTask(task);
       }
     } else {
       this.paused = false;
