@@ -1,189 +1,92 @@
 # Guión de Defensa Oral — SecureCrypt TFM
 
 **Duración estimada**: 20 minutos presentación + 10 minutos preguntas  
-**Formato recomendado**: Diapositivas (Keynote/PowerPoint/Reveal.js)  
-**Versión**: v0.3.0 post-Fase 2
+**Versión**: v0.3.0 — Fase 2 completa
 
 ---
 
-## BLOQUE 1: Motivación y contexto (3 min)
+## 1. Problema
 
-### Diapositiva 1 — Portada
-- Título, autor, director, fecha
-- Captura de la interfaz web con el panel de login y AI Advisor
-
-### Diapositiva 2 — El problema
-**Punto clave**: La correcta implementación criptográfica sigue siendo un problema no resuelto
-
-Datos de impacto:
-- OWASP Top 10 2021 incluye "A02: Cryptographic Failures" en el puesto 2 de vulnerabilidades más comunes
-- Los ataques a implementaciones criptográficas defectuosas (padding oracle, IV reutilizado, KDF débil) representan una fracción significativa de brechas de datos reales
-- Incluso desarrolladores con conocimientos teóricos cometen errores en la implementación (salt fijo, comparación no-constante, password en body)
-
-**Demostración visual**: Código vulnerable original (salt fijo en C++, password en cada request) vs. código corregido (Argon2id, tokens de sesión, prepared statements)
-
-### Diapositiva 3 — Propuesta de valor
-SecureCrypt resuelve tres problemas:
-1. Herramienta de cifrado multiplataforma que implementa correctamente AES-256-GCM + Argon2id
-2. Sistema multi-usuario con autenticación moderna (contraseña + passkeys FIDO2)
-3. Asistente IA local (RAG + Ollama) que guía la configuración sin dependencias cloud
+- **A02 OWASP Top 10 2021** — "Cryptographic Failures" en el puesto 2: los errores más frecuentes no son de teoría sino de implementación (salt fijo, IV reutilizado, KDF débil, contraseña en cada request).
+- El código del propio proyecto contenía 8 vulnerabilidades reales documentadas con CVSS (path traversal 8,1 · salt fijo C++ 8,8 · password en body 7,3 · timing attack 5,9) — demuestra que incluso con conocimiento teórico el código defectuoso es la norma, no la excepción.
 
 ---
 
-## BLOQUE 2: Arquitectura (4 min)
+## 2. Solución — qué es SecureCrypt
 
-### Diapositiva 4 — Stack tecnológico
-Diagrama visual: Browser → Express → Domain (AES-GCM, Argon2id) + Auth (SQLite, WebAuthn) + AI (RAG, Ollama)
-
-**Justificar decisiones clave**:
-- Web-first: máxima accesibilidad, cero instalación
-- TypeScript estricto: eliminación de errores en tiempo de compilación
-- SQLite embebido: sin servidor de base de datos, despliegue reproducible con Docker
-
-### Diapositiva 5 — Formato .scrypt
-Diagrama de la cabecera del archivo:
-```
-[MAGIC 6B][VER 1B][PARAMS][SALT 32B][IV 12B] || [CIPHERTEXT] || [TAG 16B]
-```
-
-**Destacar**: El salt y los parámetros Argon2id van en la cabecera → self-documenting, sin configuración externa
-
-### Diapositiva 6 — Arquitectura multi-usuario (Fase 2)
-Diagrama: User → Register/Login → SessionStore (mem + SQLite) → Vault aislado por usuario
-
-**Puntos clave**:
-- Clave maestra en memoria, token en SQLite: si se roba la DB no hay claves expuestas
-- WebAuthn/FIDO2: passkeys ligadas al origen → inmunes a phishing
-- Rate limiting separado para auth (10 req/15 min) vs. API general (100 req/15 min)
+- **Herramienta de cifrado web multiplataforma** que implementa AES-256-GCM + Argon2id correctamente, con formato de archivo `.scrypt` auto-documentado (cabecera con salt, IV y parámetros KDF embebidos).
+- **Sistema multi-usuario con autenticación moderna**: registro/login con contraseña + passkeys FIDO2/WebAuthn, sesiones híbridas (token en SQLite, clave maestra solo en RAM), config centralizada en un único `.env` para cambiar de local a producción.
+- **Asistente IA 100 % local**: RAG sobre 15 chunks NIST/OWASP + Ollama (sin datos enviados a cloud) + auditor de configuración determinista con 9 reglas — guía al desarrollador a configurar criptografía correcta sin salir de la herramienta.
 
 ---
 
-## BLOQUE 3: Implementación criptográfica (4 min)
+## 3. Stack técnico
 
-### Diapositiva 7 — AES-256-GCM con streaming
-Diagrama del pipeline:
-```
-Input → cipher.update(chunks) → Output + authTag al final
-```
-
-**Punto crítico**: El authTag DEBE verificarse antes de devolver datos. Mostrar el código de decryptFile con try/catch en decipher.final()
-
-### Diapositiva 8 — Argon2id: parámetros y resultados reales
-
-Tabla con datos del EXP-001 ejecutado en este hardware:
-
-| Parámetro | OWASP mínimo | SecureCrypt default | Tiempo medido |
-|-----------|-------------|---------------------|--------------|
-| memoryCost | 19.456 KB | 65.536 KB | 72,3 ms |
-| timeCost | 2 | 3 | (incluido) |
-| parallelism | 1 | 2 | (incluido) |
-
-**Gráfico**: Comparativa GPU hashes/s: PBKDF2 (~10.000/s) vs. Argon2id (~2-5/s) → diferencia de 2.000–5.000×
-
-### Diapositiva 9 — Correcciones de seguridad (resumen)
-
-Tabla con hallazgos, CVSS y estado post-Fase 2:
-
-| ID | CVSS | Descripción breve | Estado |
-|----|------|-------------------|--------|
-| SEC-001 | 8,1 | Path traversal | MITIGADO |
-| SEC-002 | 7,3 | Password en body | MITIGADO |
-| SEC-003 | 5,9 | Timing attack C++ | MITIGADO |
-| SEC-004 | 8,8 | Salt fijo C++ | MITIGADO |
-| SEC-005 | 6,5 | Deadlock mutex C++ | MITIGADO |
-| SEC-006 | 5,3 | Archivos tmp | MITIGADO |
-| SEC-007/8 | 7,5 | Rate limit + tokens | MITIGADO (Fase 2) |
+| Componente | Tecnología | Justificación |
+|------------|-----------|---------------|
+| Runtime / API | Node.js 20 LTS + Express + TypeScript | AES-NI nativo, tipado estático, ecosistema web maduro |
+| Cifrado | `node:crypto` (built-in) | AES-256-GCM hardware-accelerated, sin dependencias externas |
+| KDF | `argon2` npm 0.40.x | Binding nativo Argon2id, ganador PHC 2015, memory-hard |
+| Base de datos | `better-sqlite3` 12.x | Síncrona, WAL mode, sin servidor, despliegue con Docker |
+| Autenticación FIDO2 | `@simplewebauthn/server` 13.x | Passkeys W3C WebAuthn Level 2, anti-phishing por diseño |
+| Configuración | `dotenv` | Un único `.env` separa desarrollo de producción |
+| Seguridad HTTP | `helmet` + `cors` + `express-rate-limit` | Headers, CORS controlado, rate limit diferenciado auth/API |
+| IA local | Ollama + TF-IDF RAG custom | LLM local, latencia < 50 ms sin red |
+| Contenedores | Docker multi-stage + nginx | Imagen reproducible, reverse proxy con SSL |
 
 ---
 
-## BLOQUE 4: Sistema IA (4 min)
+## 4. Arquitectura
 
-### Diapositiva 10 — Arquitectura RAG
+Arquitectura hexagonal en tres capas: el **dominio** (`src/crypto/`, `src/passwordManager/`) es puro TypeScript sin dependencias de framework — `encryptFile` y `decryptFile` no saben que existe Express. La capa de **aplicación** (`src/web/`, `src/cli/`) orquesta el dominio a través de sus puertos. La **infraestructura** (Express, SQLite, Ollama HTTP) es intercambiable sin tocar la lógica de cifrado.
 
-Diagrama del pipeline:
-```
-Consulta → TF-IDF sobre 15 chunks NIST/OWASP → Top-3 → Ollama → Respuesta
-                                                          ↓ offline
-                                                    Template answer
-```
+El SessionStore es híbrido: los tokens de sesión persisten en SQLite `(token, userId, expiresAt)` para sobrevivir reinicios, pero la clave maestra **nunca sale de RAM** — un `Map<token, { masterKey: Buffer }>` que se limpia con `fill(0)` al expirar o hacer logout.
 
-**Punto diferenciador**: 100% local, sin datos enviados a cloud, funciona offline, latencia < 50 ms (TF-IDF)
-
-### Diapositiva 11 — Demostración en vivo
-
-1. Abrir interfaz web → Login con contraseña (o passkey si el navegador lo soporta)
-2. Config Auditor: pegar `{"algorithm": "AES-128-CBC", "kdf": "pbkdf2", "iterations": 10000}` → ver hallazgos ALG-001 + KDF-001 + KDF-004, score=20
-3. Chat: preguntar "¿Qué parámetros Argon2id recomienda OWASP para contraseñas?"
-
-### Diapositiva 12 — Resultados del auditor (EXP-003)
-
-Tabla de resultados reales:
-- **Precisión: 100%** (TP=9, FP=0)
-- **Recall: 100%** (FN=0)
-- **F1-Score: 1,000**
-- 9 reglas NIST/OWASP, evaluación determinista
+Para despliegue: Browser → nginx (SSL) → Express :3000 → Domain; cambiar cinco variables en `.env` (`SERVER_SECRET`, `RP_ID`, `RP_ORIGIN`, `TRUST_PROXY`, `NODE_ENV`) es todo lo necesario para pasar de desarrollo local a VPS/cloud.
 
 ---
 
-## BLOQUE 5: Evaluación y conclusiones (5 min)
+## 5. IA integrada — 3 funciones
 
-### Diapositiva 13 — Resultados experimentales (datos reales)
-
-| Experimento | Métrica principal | Resultado | Criterio |
-|-------------|-----------------|-----------|---------|
-| EXP-001 Argon2id | Tiempo derivación default | 72,3 ms | ✓ < 500 ms |
-| EXP-002 AES-GCM | Throughput cifrado | 319 MB/s | ✓ ≥ 100 MB/s |
-| EXP-003 Auditor | Precisión / Recall | 100% / 100% | ✓ ≥ 95% / 90% |
-| EXP-004 RAG | Precision@3 total | 0,90 | ✓ ≥ 0,85 |
-| EXP-005 Pentest | Vectores bloqueados | 10/10 | ✓ 100% |
-
-### Diapositiva 14 — Objetivos cumplidos vs. pendientes
-
-| Objetivo | Estado |
-|----------|--------|
-| OBJ-01: AES-256-GCM + Argon2id en Node.js | ✓ CUMPLIDO |
-| OBJ-02: Seguridad auditada (CVSS + pentest) | ✓ CUMPLIDO |
-| OBJ-03: Sistema IA local (RAG + auditor) | ✓ CUMPLIDO |
-| OBJ-04: Multi-usuario + WebAuthn (Fase 2) | ✓ CUMPLIDO |
-| OBJ-05: Suite de tests (69 tests, cobertura 63%) | ✓ CUMPLIDO |
-| OBJ-06: Windows C++ con Argon2id unificado | ⚠ PARCIAL (KDF propio) |
-| OBJ-07: Android Kotlin funcional | ⏳ PENDIENTE |
-
-### Diapositiva 15 — Trabajo futuro
-
-Roadmap actualizado:
-- **Fase 3 / Portfolio**: RAG semántico con embeddings, UI React/Tauri, extensión VS Code
-- **Fase 4 / Comercial**: API pública, macOS, integración cloud (Drive/OneDrive cifrado)
-- **Fase 5 / SaaS**: Post-cuántico (ML-KEM/Kyber), HSM, auditoría SOC 2
-
-### Diapositiva 16 — Conclusiones
-
-**Tres takeaways**:
-1. La criptografía correcta requiere **implementación** correcta, no solo teoría (el código vulnerable era de un proyecto real)
-2. RAG local con Ollama elimina el trade-off entre IA útil y privacidad de datos
-3. El análisis sistemático (CVSS + PoC + corrección + test automatizado) es una metodología reproducible para cualquier proyecto de seguridad
+- **Auditor de configuración** (`configAuditor`): evalúa una `CryptoConfig` JSON contra 9 reglas deterministas NIST/OWASP (ALG-001, KDF-001/002/003/004, KEY-001, IV-001, TAG-001, SALT-001), devuelve hallazgos con severidad, CVSS estimado y remediación. Sin LLM — reproducible y testeable. Precisión/Recall = 100 % sobre el dataset de evaluación.
+- **Asistente RAG** (`cryptoAssistant`): recupera los 3 chunks más relevantes de la base de conocimiento (15 chunks NIST/OWASP, scoring TF-IDF) y construye el contexto para Ollama. Si Ollama no está disponible, devuelve una respuesta determinista basada en los chunks — la herramienta funciona offline.
+- **Proveedor Ollama** (`ollamaProvider`): abstracción sobre `qwen2.5-coder:7b` en localhost; el `SYSTEM_PROMPT` lo orienta exclusivamente a criptografía aplicada, evitando respuestas fuera del dominio.
 
 ---
 
-## Preguntas frecuentes del tribunal
+## 6. Seguridad — decisiones criptográficas clave
 
-**P: ¿Por qué no usar bcrypt en lugar de Argon2id?**  
-R: Argon2id es memory-hard con control preciso de parámetros y ganó el Password Hashing Competition 2015. bcrypt tiene límite de 72 bytes de contraseña y es menos eficiente en garantías anti-GPU. OWASP 2024 recomienda Argon2id explícitamente. En EXP-001 medimos 72 ms con los parámetros default, demostrando que es viable en UX interactiva.
+- **Argon2id como único KDF**: memoryCost=65.536 KB, timeCost=3, parallelism=2 — reduce la velocidad de ataque GPU de ~10.000 hash/s (PBKDF2) a ~2–5 hash/s, una diferencia de 2.000–5.000×. El auditor detecta y rechaza PBKDF2 con menos de 600.000 iteraciones (KDF-001) y Argon2id con memoria < 19.456 KB (KDF-002).
+- **GCM Auth Tag verificado antes de devolver datos**: `decipher.setAuthTag()` antes del streaming + `decipher.final()` en try/catch con borrado del archivo parcial — previene ataques de modificación del texto cifrado y padding oracle.
+- **Clave maestra nunca en disco ni en logs**: derivada en RAM con Argon2id, limpiada con `fill(0)` al expirar la sesión. Para WebAuthn, la clave se envuelve con `AES-256-GCM(masterKey, SERVER_SECRET)` antes de persistir — sin `SERVER_SECRET` el blob es inútil.
 
-**P: ¿Por qué TF-IDF y no embeddings vectoriales?**  
-R: TF-IDF es suficiente para un dominio tan específico con vocabulario controlado (15 chunks, terminología técnica precisa). Los embeddings añaden complejidad (modelo 80MB adicional, servidor de embeddings), latencia y GPU para ser eficientes. EXP-004 confirma Precision@3 = 0,90 con TF-IDF. El plan incluye embeddings en Fase 3.
+---
 
-**P: ¿Es seguro almacenar la clave maestra en memoria del servidor?**  
-R: Es el enfoque estándar. La alternativa (derivar la clave en cada request) requeriría la contraseña en cada request — el problema de SEC-002 que precisamente solucionamos. La clave se limpia de memoria con `fill(0)` al hacer logout o expirar la sesión. El atacante necesita acceso a la memoria del proceso en ejecución, no solo al disco.
+## 7. Demo
 
-**P: ¿Cómo escala esto a múltiples usuarios concurrentes?**  
-R: El SessionStore actual es in-memory por proceso. Para escalar horizontalmente se usaría Redis con TTL. La SQLite con WAL mode soporta múltiples lectores concurrentes. Los workers de cifrado tienen su propio pool — el stress test EXP-002 demuestra 319 MB/s con I/O en streaming.
+- Vídeo (3 min): arrancar `npm run dev:web` → registrar usuario → login con contraseña → cifrar un archivo desde la interfaz → auditar `{"algorithm":"AES-128-CBC","kdf":"pbkdf2","iterations":10000}` y ver hallazgos ALG-001 + KDF-001 + KDF-004 con score=20 → hacer una pregunta al asistente IA sobre parámetros Argon2id recomendados → registrar passkey FIDO2 → cerrar sesión → login con passkey.
 
-**P: ¿Por qué Node.js y no Go o Rust para las operaciones criptográficas?**  
-R: Node.js crypto delega a OpenSSL con aceleración AES-NI cuando está disponible. El throughput medido en EXP-002 (319 MB/s cifrado, 508 MB/s descifrado) es comparable a Go/Rust para archivos de tamaño mediano. La ventaja es la integración nativa con el ecosistema web (Express, TypeScript, npm) y la velocidad de iteración.
+---
 
-**P: ¿Las passkeys WebAuthn son compatibles con todos los navegadores?**  
-R: Sí, desde 2023. WebAuthn Level 2 está implementado en Chrome 108+, Safari 16+, Firefox 122+, Edge 108+ y todos los navegadores móviles modernos. SecureCrypt ofrece contraseña como fallback para dispositivos sin soporte biométrico.
+## 8. Resultados experimentos
 
-**P: ¿Cómo se justifica la inconsistencia KDF entre plataformas?**  
-R: Es una limitación documentada (ADR-001). Node.js usa Argon2id correcto. Windows C++ usa SHA-256 iterado (KDF personalizado débil), documentado como trabajo futuro urgente. Android usa PBKDF2 × 30.000 (aceptable pero no óptimo). Los archivos **no son intercambiables** entre plataformas, lo que se documenta explícitamente. La unificación con libsodium está planificada para la Fase 3.
+| Experimento | Métrica | Resultado medido |
+|-------------|---------|-----------------|
+| EXP-001 — Argon2id benchmark | Tiempo derivación config default (65.536 KB, t=3, p=2) en i7-12700H | **86,5 ms** (σ=7,6 ms) — dentro del rango interactivo OWASP < 100 ms |
+| EXP-003 — Auditor precisión | Precisión / Recall / F1 sobre 10 configs (2 seguras + 8 vulnerables) | **100 % / 100 % / 1,000** — TP=9, FP=0, FN=0 |
+| Tests suite | Tests automatizados (unit + integración + stress) | **69/69 passed** — 10 suites, 0 fallos |
+
+---
+
+## 9. Trabajo futuro
+
+- **App Windows nativa (C++)**: estructura ya implementada (Win32, BCrypt, SQLite); pendiente completar los diálogos reales (AuthDialog, PasswordDialog) y conectar el repositorio SQLite al motor de cifrado.
+- **App Android (Kotlin/Jetpack Compose)**: pendiente de implementación; el formato `.scrypt` y el esquema de cabecera están especificados para facilitar la interoperabilidad.
+- **Interoperabilidad de formato entre plataformas**: unificar el KDF en las tres plataformas (web usa Argon2id correcto; C++ usa PBKDF2-HMAC-SHA256 × 600.000 por limitación de BCrypt) — planificado con libsodium para tener Argon2id nativo en C++ y Android.
+
+---
+
+## 10. Conclusión
+
+- La criptografía correcta es un problema de **implementación**, no de teoría: el mismo proyecto contenía 8 vulnerabilidades reales que pasaron desapercibidas hasta el análisis sistemático (CVSS + PoC + corrección + test automatizado) — esa metodología es la contribución reproducible del TFM.
+- RAG local con Ollama demuestra que es posible tener IA útil y especializada sin enviar datos a servicios externos: el auditor obtiene precisión perfecta sobre su dominio y el asistente responde preguntas NIST/OWASP con latencia < 50 ms incluso sin conexión.

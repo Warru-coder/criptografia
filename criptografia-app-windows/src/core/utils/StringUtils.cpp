@@ -6,6 +6,9 @@
 #include <codecvt>
 #include <iomanip>
 #include <sstream>
+#include <wincrypt.h>
+
+#pragma comment(lib, "crypt32.lib")
 
 namespace securecrypt::utils {
 
@@ -130,11 +133,41 @@ std::string StringUtils::WideToUtf8(const std::wstring& wstr) {
 
 std::wstring StringUtils::Utf8ToWide(const std::string& str) {
     if (str.empty()) return L"";
-    
+
     int size_needed = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), NULL, 0);
     std::wstring wstrTo(size_needed, 0);
     MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &wstrTo[0], size_needed);
     return wstrTo;
+}
+
+std::string StringUtils::ToBase64(const std::vector<BYTE>& data) {
+    if (data.empty()) return "";
+
+    DWORD outLen = 0;
+    CryptBinaryToStringA(data.data(), static_cast<DWORD>(data.size()),
+                         CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &outLen);
+
+    std::string result(outLen, '\0');
+    CryptBinaryToStringA(data.data(), static_cast<DWORD>(data.size()),
+                         CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, &result[0], &outLen);
+
+    // trim any embedded null terminator
+    while (!result.empty() && result.back() == '\0') result.pop_back();
+    return result;
+}
+
+std::vector<BYTE> StringUtils::FromBase64(const std::string& b64) {
+    if (b64.empty()) return {};
+
+    DWORD outLen = 0;
+    CryptStringToBinaryA(b64.c_str(), static_cast<DWORD>(b64.size()),
+                         CRYPT_STRING_BASE64, nullptr, &outLen, nullptr, nullptr);
+
+    std::vector<BYTE> result(outLen);
+    CryptStringToBinaryA(b64.c_str(), static_cast<DWORD>(b64.size()),
+                         CRYPT_STRING_BASE64, result.data(), &outLen, nullptr, nullptr);
+    result.resize(outLen);
+    return result;
 }
 
 }

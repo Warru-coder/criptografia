@@ -5,6 +5,7 @@
 #include "../core/crypto/KeyManager.h"
 #include "../core/storage/StorageManager.h"
 #include "../ui/MainWindow.h"
+#include "../ui/dialogs/AuthDialog.h"
 #include <shellapi.h>
 
 namespace securecrypt::app {
@@ -66,16 +67,20 @@ int AppController::Run(HINSTANCE hInstance, int nCmdShow) {
     }
     
     ui::MainWindow mainWindow;
-    
+
     if (!mainWindow.Create(hInstance, nCmdShow)) {
         Logger::GetInstance().Error(L"Failed to create main window", L"AppController");
         return -1;
     }
-    
-    if (m_isFirstRun) {
-        mainWindow.ShowAuthDialog();
+
+    INT_PTR authResult = ui::dialogs::AuthDialog::Show(mainWindow.GetHandle(), m_isFirstRun);
+    if (authResult == IDCANCEL) {
+        DestroyWindow(mainWindow.GetHandle());
+        return 0;
     }
-    
+
+    m_isAuthenticated = true;
+    mainWindow.LoadData();
     return mainWindow.Run();
 }
 

@@ -21,8 +21,12 @@ public:
     ~MainWindow();
     
     bool Create(HINSTANCE hInstance, int nCmdShow);
-    
+
     int Run();
+
+    HWND GetHandle() const { return m_hWnd; }
+
+    void LoadData();
     
     static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
     

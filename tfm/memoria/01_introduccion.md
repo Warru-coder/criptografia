@@ -36,13 +36,13 @@ Este TFM se enmarca en el contexto del Máster en Ciberseguridad y Computación,
 | Asistente IA (chat) | Ollama + qwen2.5-coder | Completo |
 | Auditor de configuración | 9 reglas NIST/OWASP | Completo |
 | App Windows nativa | C++/Win32 | Parcial |
-| App Android nativa | Kotlin/Jetpack Compose | Planificado |
+| App Android nativa | Kotlin/Jetpack Compose | Trabajo futuro |
 
 ### 1.3.2 Fuera de alcance
 
 - Cifrado asimétrico (RSA, ECC) — se mantiene en la hoja de ruta
 - Sincronización en la nube — versión SaaS planificada para v2
-- Autenticación multifactor — planificada en Fase 2
+- Autenticación multifactor avanzada (TOTP, SMS) — en la hoja de ruta; WebAuthn/FIDO2 (passkeys) implementado en Fase 2 vía `webauthnRoutes.ts`
 - Soporte macOS/Linux nativo — en la hoja de ruta
 
 ## 1.4 Estructura de la memoria

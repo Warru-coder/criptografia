@@ -1078,3 +1078,34 @@ input::placeholder {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ─── File classifier badge ─────────────────────────────────────────────────── */
+
+.classify-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.classify-badge.sensitive {
+  background: rgba(255, 0, 64, 0.15);
+  border: 1px solid rgba(255, 0, 64, 0.5);
+  color: #ff4466;
+}
+
+.classify-badge.not-sensitive {
+  background: rgba(136, 136, 136, 0.1);
+  border: 1px solid rgba(136, 136, 136, 0.3);
+  color: var(--text-secondary);
+}
+
+.classify-badge .badge-icon {
+  font-style: normal;
+}

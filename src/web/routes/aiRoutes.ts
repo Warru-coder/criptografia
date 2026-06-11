@@ -1,6 +1,7 @@
 import express from 'express';
 import { auditConfig, CryptoConfig } from '../../ai/services/configAuditor';
 import { askAssistant, ChatMessage } from '../../ai/services/cryptoAssistant';
+import { classifyFile } from '../../ai/services/fileClassifier';
 import { chat, isOllamaAvailable, OLLAMA_MODEL } from '../../ai/providers/ollamaProvider';
 import { requireSession } from '../middleware/requireSession';
 import { logger } from '../../utils/logger';
@@ -123,6 +124,36 @@ Resumen:`;
         ? 'Ollama tardó demasiado en responder. Prueba con menos entradas o espera a que el modelo termine de cargar.'
         : msg,
     });
+  }
+});
+
+router.post('/classify-file', requireSession, async (req, res) => {
+  try {
+    const { filename, sizeBytes, mimeType } = req.body as {
+      filename: unknown;
+      sizeBytes: unknown;
+      mimeType?: unknown;
+    };
+
+    if (typeof filename !== 'string' || filename.trim().length === 0) {
+      res.status(400).json({ error: 'filename is required' });
+      return;
+    }
+    if (typeof sizeBytes !== 'number' || sizeBytes < 0) {
+      res.status(400).json({ error: 'sizeBytes must be a non-negative number' });
+      return;
+    }
+
+    const result = await classifyFile(
+      filename.trim().slice(0, 255),
+      sizeBytes,
+      typeof mimeType === 'string' ? mimeType.slice(0, 100) : undefined
+    );
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`File classify failed: ${(error as Error).message}`);
+    res.status(500).json({ error: (error as Error).message });
   }
 });
 

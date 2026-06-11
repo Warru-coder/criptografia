@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <windows.h>
 
 namespace securecrypt::utils {
 
@@ -45,8 +46,12 @@ public:
     static bool IsNullOrEmpty(const std::wstring& str);
     
     static std::string WideToUtf8(const std::wstring& wstr);
-    
+
     static std::wstring Utf8ToWide(const std::string& str);
+
+    static std::string ToBase64(const std::vector<BYTE>& data);
+
+    static std::vector<BYTE> FromBase64(const std::string& b64);
 };
 
 }

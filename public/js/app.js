@@ -418,6 +418,7 @@ function addFileToList(file) {
   item.innerHTML = `
     <span class="name" title="${file.name}">${file.name}</span>
     <span class="size">${formatSize(file.size)}</span>
+    <span class="classify-badge-slot"></span>
     <div class="actions">
       ${!isEncrypted ? '<button class="btn btn-primary btn-encrypt">Encrypt</button>' : ''}
       ${isEncrypted ? '<button class="btn btn-primary btn-decrypt">Decrypt</button>' : ''}
@@ -432,6 +433,38 @@ function addFileToList(file) {
   if (decryptBtn) decryptBtn.addEventListener('click', () => processFile(item, 'decrypt'));
   removeBtn.addEventListener('click', () => item.remove());
   fileList.appendChild(item);
+
+  // Classify in background — never blocks encrypt/decrypt flow
+  if (!isEncrypted && sessionToken) {
+    classifyAndBadge(file, item.querySelector('.classify-badge-slot'));
+  }
+}
+
+async function classifyAndBadge(file, slot) {
+  try {
+    const res = await apiFetch('/api/ai/classify-file', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, sizeBytes: file.size, mimeType: file.type || undefined }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.available || !slot) return;
+
+    const badge = document.createElement('span');
+    if (data.sensitive) {
+      badge.className = 'classify-badge sensitive';
+      badge.title = `${data.category} — ${data.reason}\n${data.recommendation}`;
+      badge.innerHTML = `<i class="badge-icon">⚠</i> ${data.category}`;
+    } else {
+      badge.className = 'classify-badge not-sensitive';
+      badge.title = `${data.category} — ${data.reason}`;
+      badge.innerHTML = `<i class="badge-icon">✓</i> ${data.category}`;
+    }
+    slot.appendChild(badge);
+  } catch {
+    // Silent fail — classification is best-effort
+  }
 }
 
 async function processFile(item, action) {

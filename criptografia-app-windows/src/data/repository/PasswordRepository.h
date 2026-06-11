@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <optional>
+#include <windows.h>
 
 namespace securecrypt::repository {
 
@@ -44,7 +45,10 @@ public:
 private:
     PasswordRepository();
     ~PasswordRepository();
-    
+
+    std::wstring DecryptFieldBase64(const std::string& b64);
+    std::string EncryptFieldToBase64(const std::wstring& field);
+
     data::DecryptedPassword DecryptEntry(const data::PasswordEntry& entry);
     data::PasswordEntry EncryptEntry(const data::DecryptedPassword& entry);
 };

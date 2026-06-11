@@ -156,10 +156,8 @@ bool MainWindow::Create(HINSTANCE hInstance, int nCmdShow) {
     if (!CreateStatusBar()) return false;
     
     m_isInitialized = true;
-    m_isLocked = false;
-    
-    LoadPasswords();
-    
+    m_isLocked = true;
+
     return true;
 }
 
@@ -418,18 +416,31 @@ void MainWindow::EnableDarkTitleBar() {
     DwmSetWindowAttribute(m_hWnd, 20, &value, sizeof(value));
 }
 
+void MainWindow::LoadData() {
+    m_isLocked = false;
+    LoadPasswords();
+}
+
 void MainWindow::ShowAuthDialog() {
-    if (app::AppController::GetInstance().IsFirstRun()) {
-        MessageBoxW(m_hWnd, L"Welcome to SecureCrypt!\n\nPlease create a master password to get started.",
-                   L"Setup", MB_ICONINFORMATION);
-    } else {
-        MessageBoxW(m_hWnd, L"Please enter your master password to unlock.",
-                   L"Unlock", MB_ICONINFORMATION);
-    }
+    dialogs::AuthDialog::Show(m_hWnd, app::AppController::GetInstance().IsFirstRun());
 }
 
 void MainWindow::ShowPasswordDialog(bool isEdit, int editId) {
-    MessageBoxW(m_hWnd, L"Password dialog placeholder", L"Add Password", MB_ICONINFORMATION);
+    INT_PTR res = dialogs::PasswordDialog::Show(m_hWnd, isEdit, editId);
+    if (res == IDOK) {
+        auto& result = dialogs::PasswordDialog::LastResult;
+        auto& repo = repository::PasswordRepository::GetInstance();
+        if (isEdit && editId > 0) {
+            repo.UpdatePassword(editId, result.data.title, result.data.username,
+                result.data.password, result.data.url, result.data.notes,
+                result.data.category, result.data.tags);
+        } else {
+            repo.SavePassword(result.data.title, result.data.username,
+                result.data.password, result.data.url, result.data.notes,
+                result.data.category, result.data.tags);
+        }
+        LoadPasswords();
+    }
 }
 
 void MainWindow::ShowDocumentDialog() {

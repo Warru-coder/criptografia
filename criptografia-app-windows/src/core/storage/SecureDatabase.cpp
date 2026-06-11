@@ -1,6 +1,8 @@
 #include "SecureDatabase.h"
 #include "../utils/Logger.h"
+#include "../utils/StringUtils.h"
 #include <sqlite3.h>
+#include <functional>
 
 namespace securecrypt::storage {
 
@@ -16,31 +18,26 @@ SecureDatabase::~SecureDatabase() {
     Close();
 }
 
-bool SecureDatabase::Initialize(const std::wstring& dbPath, const std::vector<BYTE>& key) {
+bool SecureDatabase::Initialize(const std::wstring& dbPath) {
     if (m_isInitialized) return true;
-    
-    std::string pathUtf8;
-    pathUtf8.resize(dbPath.size());
-    pathUtf8.resize(WideCharToMultiByte(CP_UTF8, 0, dbPath.c_str(), -1, &pathUtf8[0], static_cast<int>(dbPath.size()), NULL, NULL));
-    
+
+    std::string pathUtf8 = utils::StringUtils::WideToUtf8(dbPath);
+
     int rc = sqlite3_open(pathUtf8.c_str(), &m_db);
     if (rc != SQLITE_OK) {
         Logger::GetInstance().Error(L"Failed to open database", L"SecureDatabase");
         return false;
     }
-    
-    std::string keyStr(reinterpret_cast<const char*>(key.data()), key.size());
-    sqlite3_key(m_db, keyStr.c_str(), static_cast<int>(key.size()));
-    
+
     if (!CreateTables()) {
         Logger::GetInstance().Error(L"Failed to create tables", L"SecureDatabase");
         return false;
     }
-    
+
     Execute("PRAGMA journal_mode=WAL;");
     Execute("PRAGMA secure_delete=ON;");
     Execute("PRAGMA foreign_keys=ON;");
-    
+
     m_isInitialized = true;
     Logger::GetInstance().Info(L"Database initialized", L"SecureDatabase");
     return true;
@@ -52,48 +49,88 @@ bool SecureDatabase::IsInitialized() const {
 
 bool SecureDatabase::Execute(const std::string& sql) {
     if (!m_db || !m_isInitialized) return false;
-    
+
     char* errMsg = nullptr;
     int rc = sqlite3_exec(m_db, sql.c_str(), nullptr, nullptr, &errMsg);
-    
+
     if (rc != SQLITE_OK) {
         Logger::GetInstance().Error(L"SQL error: " + std::wstring(errMsg, errMsg + strlen(errMsg)), L"SecureDatabase");
         sqlite3_free(errMsg);
         return false;
     }
-    
+
     return true;
 }
 
 bool SecureDatabase::Execute(const std::wstring& sql) {
-    std::string utf8;
-    utf8.resize(sql.size());
-    utf8.resize(WideCharToMultiByte(CP_UTF8, 0, sql.c_str(), -1, &utf8[0], static_cast<int>(sql.size()), NULL, NULL));
-    return Execute(utf8);
+    return Execute(utils::StringUtils::WideToUtf8(sql));
 }
 
 std::vector<std::vector<std::string>> SecureDatabase::Query(const std::string& sql) {
     std::vector<std::vector<std::string>> results;
-    
+
     if (!m_db || !m_isInitialized) return results;
-    
+
     sqlite3_stmt* stmt = nullptr;
     int rc = sqlite3_prepare_v2(m_db, sql.c_str(), -1, &stmt, nullptr);
-    
+
     if (rc != SQLITE_OK) return results;
-    
+
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
         std::vector<std::string> row;
         int cols = sqlite3_column_count(stmt);
-        
+
         for (int i = 0; i < cols; ++i) {
             const unsigned char* text = sqlite3_column_text(stmt, i);
             row.push_back(text ? reinterpret_cast<const char*>(text) : "");
         }
-        
+
         results.push_back(row);
     }
-    
+
+    sqlite3_finalize(stmt);
+    return results;
+}
+
+bool SecureDatabase::ExecutePrepared(const std::string& sql, std::function<void(sqlite3_stmt*)> binder) {
+    if (!m_db || !m_isInitialized) return false;
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(m_db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) return false;
+
+    binder(stmt);
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE;
+}
+
+bool SecureDatabase::InsertPrepared(const std::string& sql, std::function<void(sqlite3_stmt*)> binder) {
+    return ExecutePrepared(sql, binder);
+}
+
+std::vector<std::vector<std::string>> SecureDatabase::QueryPrepared(const std::string& sql, std::function<void(sqlite3_stmt*)> binder) {
+    std::vector<std::vector<std::string>> results;
+
+    if (!m_db || !m_isInitialized) return results;
+
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(m_db, sql.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) return results;
+
+    binder(stmt);
+
+    int cols = sqlite3_column_count(stmt);
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        std::vector<std::string> row;
+        for (int i = 0; i < cols; ++i) {
+            const unsigned char* text = sqlite3_column_text(stmt, i);
+            row.push_back(text ? reinterpret_cast<const char*>(text) : "");
+        }
+        results.push_back(row);
+    }
+
     sqlite3_finalize(stmt);
     return results;
 }
@@ -140,7 +177,7 @@ bool SecureDatabase::CreateTables() {
             is_favorite INTEGER DEFAULT 0,
             tags TEXT DEFAULT ''
         );
-        
+
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -157,7 +194,7 @@ bool SecureDatabase::CreateTables() {
             tags TEXT DEFAULT '',
             thumbnail_path TEXT DEFAULT ''
         );
-        
+
         CREATE TABLE IF NOT EXISTS notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -168,7 +205,7 @@ bool SecureDatabase::CreateTables() {
             is_favorite INTEGER DEFAULT 0,
             tags TEXT DEFAULT ''
         );
-        
+
         CREATE INDEX IF NOT EXISTS idx_passwords_title ON passwords(title);
         CREATE INDEX IF NOT EXISTS idx_passwords_category ON passwords(category);
         CREATE INDEX IF NOT EXISTS idx_passwords_favorite ON passwords(is_favorite);
@@ -177,7 +214,7 @@ bool SecureDatabase::CreateTables() {
         CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title);
         CREATE INDEX IF NOT EXISTS idx_notes_favorite ON notes(is_favorite);
     )";
-    
+
     return Execute(sql);
 }
 
