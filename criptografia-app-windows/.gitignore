@@ -1,0 +1,70 @@
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+
+# Build directories
+build/
+cmake-build-*/
+out/
+bin/
+lib/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+ipch/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Installer
+installer/output/
+*.exe
+*.msi
+
+# IDE
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test
+TestResults/
+*.coverage
+*.gcno
+*.gcda
+
+# Debug
+*.log
+*.dmp
+
+# Sensitive
+*.key
+*.pfx
+*.p12
+*.cer
+*.pem
+secrets/
+.env
+
+# Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
