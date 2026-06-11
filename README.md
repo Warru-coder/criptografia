@@ -411,10 +411,10 @@ Un sistema de agentes IA con roles diferenciados:
 
 Basado en Ollama local con Qwen 2.5 Coder 7B — el código del proyecto nunca sale del dispositivo.
 
-### En el producto (Roadmap v0.5.0)
-- **Auditor de configuración**: detecta parámetros inseguros con referencias a estándares
-- **Asistente RAG**: responde preguntas sobre criptografía con fuentes verificadas (NIST, OWASP, RFC)
-- **Clasificador de sensibilidad**: recomienda nivel de protección por tipo de archivo
+### En el producto (Implementado en v0.3.0)
+- **Auditor de configuración** (`src/ai/services/configAuditor.ts`): 9 reglas deterministas (ALG-001, KDF-001–004, KEY-001, IV-001, TAG-001, SALT-001) — detecta parámetros inseguros con referencias a OWASP/NIST. Disponible en `POST /api/ai/audit`.
+- **Asistente RAG** (`src/ai/services/cryptoAssistant.ts`): responde preguntas sobre criptografía con fuentes verificadas (NIST SP 800-131A, OWASP, RFC 9106) mediante TF-IDF sobre 15 chunks técnicos. Disponible en `POST /api/ai/chat`.
+- **Clasificador de sensibilidad** (`src/ai/services/fileClassifier.ts`): clasifica archivos por categoría (FINANCIERO, PERSONAL, CREDENCIALES, TRABAJO, MULTIMEDIA, OTRO) a partir de metadatos — nunca del contenido. Muestra badge en la UI al arrastrar un archivo. Disponible en `POST /api/ai/classify-file`.
 
 Ver [Plan de Integración de IA](docs/ai/ai-integration.md).
 
@@ -515,7 +515,7 @@ Email: gabideltoya@gmail.com
 |---|---|
 | Funcionalidad principal (CLI/API) | ✅ Estable |
 | Aplicación Windows | ✅ Funcional |
-| Aplicación Android | ✅ Funcional |
+| Aplicación Android | 🔄 Trabajo futuro (fuera del scope v0.3.0) |
 | Tests | ⚠️ En progreso (45% → objetivo 80%) |
 | Seguridad (issues conocidos) | ⚠️ Correcciones en progreso ([detalle](docs/security/security-audit.md)) |
 | Integración IA en producto | 🔄 En desarrollo |
