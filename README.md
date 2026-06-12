@@ -97,7 +97,7 @@ Ver [Arquitectura Completa](docs/architecture/clean-architecture.md) para diagra
 | API REST | Express + Zod + Helmet | 4.21, 3.24, 8.0 |
 | Rate limiting | express-rate-limit | 7.5 |
 | Base de datos | SQLite | 3.x |
-| IA local | Ollama + Qwen2.5-Coder:7B | — |
+| IA local | Ollama + llama3.2:3b | — |
 | Logging | Winston | 3.17 |
 | Tests | Vitest + JUnit4 + Mockk | 2.1.8 |
 | CI/CD | GitHub Actions | — |
@@ -111,7 +111,7 @@ Ver [Arquitectura Completa](docs/architecture/clean-architecture.md) para diagra
 ### CLI + API (Node.js)
 - Node.js 20 o superior
 - npm 10 o superior
-- Para IA local: [Ollama](https://ollama.ai) con modelo `qwen2.5-coder:7b-instruct-q4_K_M` (requiere 8 GB RAM)
+- Para IA local: [Ollama](https://ollama.ai) con modelo `llama3.2:3b` (requiere ~4 GB RAM)
 
 ### Aplicación Windows
 - Windows 10 64-bit o superior (Windows 11 recomendado)
@@ -154,7 +154,7 @@ cmake --build build --config Release
 ```bash
 # Instalar Ollama desde https://ollama.ai
 # Descargar el modelo (una sola vez, ~4 GB)
-ollama pull qwen2.5-coder:7b-instruct-q4_K_M
+ollama pull llama3.2:3b
 ```
 
 ---
@@ -175,7 +175,7 @@ SECURECRYPT_BASE_DIR=C:/Users/TuUsuario/Documents
 # Proveedor de IA: 'ollama' (local, por defecto) o 'claude' (cloud opt-in)
 AI_PROVIDER=ollama
 OLLAMA_BASE_URL=http://localhost:11434/v1
-OLLAMA_MODEL=qwen2.5-coder:7b-instruct-q4_K_M
+OLLAMA_MODEL=llama3.2:3b
 
 # Si AI_PROVIDER=claude (requiere consentimiento explícito del usuario)
 # ANTHROPIC_API_KEY=sk-ant-...
@@ -394,7 +394,7 @@ Un sistema de agentes IA con roles diferenciados:
 - **`lead-developer`**: puede editar código, ejecutar tests, sigue flujo Plan→Implement→Test→Document
 - **`security-supervisor`**: solo lectura, audita cada cambio criptográfico, puede bloquear releases
 
-Basado en Ollama local con Qwen 2.5 Coder 7B — el código del proyecto nunca sale del dispositivo.
+Basado en Ollama local con llama3.2:3b — el código del proyecto nunca sale del dispositivo.
 
 ### En el producto (Implementado en v0.3.0)
 - **Auditor de configuración** (`src/ai/services/configAuditor.ts`): 9 reglas deterministas (ALG-001, KDF-001–004, KEY-001, IV-001, TAG-001, SALT-001) — detecta parámetros inseguros con referencias a OWASP/NIST. Disponible en `POST /api/ai/audit`.

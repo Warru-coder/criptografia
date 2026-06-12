@@ -58,7 +58,7 @@ export const env = {
 
   // AI / Ollama
   ollamaBaseUrl:  str(process.env.OLLAMA_BASE_URL, 'http://localhost:11434/v1'),
-  ollamaModel:    str(process.env.OLLAMA_MODEL, 'qwen2.5-coder:7b-instruct-q4_K_M'),
+  ollamaModel:    str(process.env.OLLAMA_MODEL, 'llama3.2:3b'),
   ollamaTimeoutMs: num(process.env.OLLAMA_TIMEOUT_MS, 30_000),
 
   // Upload
