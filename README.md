@@ -423,15 +423,17 @@ npm run test:coverage
 
 ### Estado de la cobertura
 
-| Módulo | Tests | Cobertura estimada |
+| Módulo | Tests | Cobertura |
 |---|---|---|
-| `crypto/` | 13 tests | ~75% |
-| `backgroundTasks/` | 8 tests | ~60% |
-| `passwordManager/` | 9 tests | ~85% |
-| `web/routes/` | 4 tests | ~20% |
-| **Total** | **34 tests** | **~45%** |
+| `crypto/` (unit + integration) | 20 | — |
+| `database/` | 18 | — |
+| `web/routes/` (auth integration) | 11 | — |
+| `passwordManager/` | 9 | — |
+| `session/` | 6 | — |
+| `stress/` (memory + concurrencia) | 5 | — |
+| **Total** | **69** | **—** |
 
-**Objetivo para TFM**: ≥80% cobertura.
+Los porcentajes de cobertura no están medidos. Para obtenerlos: `npm run test:coverage`.
 
 Ver [Estrategia de Testing Completa](docs/testing/testing-strategy.md).
 
@@ -500,7 +502,7 @@ Email: gabideltoya@gmail.com
 |---|---|
 | Funcionalidad principal (CLI/API) | ✅ Estable |
 | Aplicación Windows | ✅ Funcional |
-| Tests | ⚠️ En progreso (45% → objetivo 80%) |
+| Tests | ✅ 69 passing (cobertura no medida — ejecutar `npm run test:coverage`) |
 | Seguridad (issues conocidos) | ⚠️ Correcciones en progreso ([detalle](docs/security/security-audit.md)) |
 | Integración IA en producto | 🔄 En desarrollo |
 | Documentación técnica | 🔄 En progreso |
