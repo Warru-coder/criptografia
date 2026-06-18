@@ -1,5 +1,10 @@
 export const MAGIC_BYTES = Buffer.from('SCRYPT');
-export const FILE_VERSION = 1;
+// Format version legend:
+//   v1 = legacy: file-key = Argon2id(masterKey.base64, salt). Still readable.
+//   v2 = ADR-0007: file-key = HKDF-SHA256(masterKey, salt, info, 32). Current default.
+export const FILE_VERSION_V1 = 1;
+export const FILE_VERSION_V2 = 2;
+export const FILE_VERSION = FILE_VERSION_V2;
 export const SALT_LENGTH = 16;
 export const IV_LENGTH = 16;
 export const AUTH_TAG_LENGTH = 16;

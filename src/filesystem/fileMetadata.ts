@@ -38,7 +38,8 @@ export function buildHeader(
   salt: Buffer,
   iv: Buffer,
   originalPath: string,
-  originalSize: number
+  originalSize: number,
+  version: number = FILE_VERSION,
 ): Buffer {
   const header = Buffer.alloc(HEADER_SIZE, 0);
 
@@ -50,7 +51,7 @@ export function buildHeader(
   MAGIC_BYTES.copy(header, offset);
   offset += MAGIC_BYTES.length;
 
-  header.writeUInt8(FILE_VERSION, offset);
+  header.writeUInt8(version, offset);
   offset += 1;
 
   salt.copy(header, offset);

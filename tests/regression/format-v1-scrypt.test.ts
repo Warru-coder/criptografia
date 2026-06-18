@@ -5,10 +5,12 @@ import os from 'os';
 import crypto from 'crypto';
 import { encryptFile } from '../../src/crypto/fileCipher';
 import { decryptFile } from '../../src/crypto/fileDecipher';
-import { readHeader } from '../../src/filesystem/fileMetadata';
+import { readHeader, buildHeader } from '../../src/filesystem/fileMetadata';
+import { deriveFileKey } from '../../src/crypto/keyDerivation';
 import {
   MAGIC_BYTES,
-  FILE_VERSION,
+  FILE_VERSION_V1,
+  FILE_VERSION_V2,
   SALT_LENGTH,
   IV_LENGTH,
   HEADER_SIZE,
@@ -65,7 +67,7 @@ describe('Golden v1: formato .scrypt (pre-auditoría)', () => {
     expect(buf.subarray(0, MAGIC_BYTES.length).equals(MAGIC_BYTES)).toBe(true);
 
     // VERSION en byte 6
-    expect(buf.readUInt8(MAGIC_BYTES.length)).toBe(FILE_VERSION);
+    expect(buf.readUInt8(MAGIC_BYTES.length)).toBe(FILE_VERSION_V2);
 
     // Argon2 params en su offset esperado
     const paramsOffset = MAGIC_BYTES.length + 1 + SALT_LENGTH + IV_LENGTH;
@@ -91,7 +93,7 @@ describe('Golden v1: formato .scrypt (pre-auditoría)', () => {
     await encryptFile(input, encrypted, GOLDEN_MASTER_KEY);
     const header = await readHeader(encrypted);
 
-    expect(header.version).toBe(FILE_VERSION);
+    expect(header.version).toBe(FILE_VERSION_V2);
     expect(header.salt.length).toBe(SALT_LENGTH);
     expect(header.iv.length).toBe(IV_LENGTH);
     expect(header.argon2MemoryCost).toBe(ARGON2_MEMORY_COST);
@@ -150,5 +152,29 @@ describe('Golden v1: formato .scrypt (pre-auditoría)', () => {
     fs.writeFileSync(encrypted, buf);
 
     await expect(decryptFile(encrypted, decrypted, GOLDEN_MASTER_KEY)).rejects.toThrow();
+  });
+});
+
+describe('Legacy v1: lectura de archivos pre-ADR-0007 (Argon2id-over-key)', () => {
+  it('decryptFile descifra correctamente un fichero v1 escrito a mano', async () => {
+    // Construimos un v1 .scrypt manualmente con el KDF antiguo
+    const salt = crypto.randomBytes(SALT_LENGTH);
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const plaintext = Buffer.from('legacy v1 payload', 'utf-8');
+
+    // KDF v1: Argon2id(masterKey.base64, salt)
+    const fileKey = await deriveFileKey(GOLDEN_MASTER_KEY.toString('base64'), salt);
+
+    const cipher = crypto.createCipheriv('aes-256-gcm', fileKey, iv, { authTagLength: AUTH_TAG_LENGTH });
+    const encBody = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    const tag = cipher.getAuthTag();
+
+    const header = buildHeader(salt, iv, 'legacy.txt', plaintext.length, FILE_VERSION_V1);
+    const v1Path = path.join(testDir, 'legacy.scrypt');
+    fs.writeFileSync(v1Path, Buffer.concat([header, encBody, tag]));
+
+    const outPath = path.join(testDir, 'legacy.dec');
+    await decryptFile(v1Path, outPath, GOLDEN_MASTER_KEY);
+    expect(fs.readFileSync(outPath).equals(plaintext)).toBe(true);
   });
 });

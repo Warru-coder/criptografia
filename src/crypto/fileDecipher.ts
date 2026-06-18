@@ -5,9 +5,11 @@ import {
   AUTH_TAG_LENGTH,
   HEADER_SIZE,
   STREAM_HIGH_WATER_MARK,
+  FILE_VERSION_V1,
+  FILE_VERSION_V2,
 } from '../core/constants';
 import { CryptoError } from '../core/errorHandler';
-import { deriveFileKey } from './keyDerivation';
+import { deriveFileKey, deriveFileKeyHKDF } from './keyDerivation';
 import { secureClear } from './cryptoUtils';
 import { readHeader } from '../filesystem/fileMetadata';
 
@@ -38,7 +40,16 @@ export async function decryptFile(
     throw new CryptoError('Invalid encrypted file - file may be corrupted or too small');
   }
 
-  const fileKey = await deriveFileKey(masterKey.toString('base64'), salt);
+  // ALTA-01 / ADR-0007: dispatch on header.version.
+  let fileKey: Buffer;
+  if (header.version === FILE_VERSION_V2) {
+    fileKey = deriveFileKeyHKDF(masterKey, salt);
+  } else if (header.version === FILE_VERSION_V1) {
+    // Legacy: Argon2id over the base64 of the (already-derived) masterKey.
+    fileKey = await deriveFileKey(masterKey.toString('base64'), salt);
+  } else {
+    throw new CryptoError(`Unsupported .scrypt file version: ${header.version}`);
+  }
   const decipher = crypto.createDecipheriv('aes-256-gcm', fileKey, iv, {
     authTagLength: AUTH_TAG_LENGTH,
   });
