@@ -1,0 +1,68 @@
+# npm audit report
+
+esbuild  <=0.24.2 || 0.27.3 - 0.28.0
+Severity: moderate
+esbuild enables any website to send any requests to the development server and read the response - https://github.com/advisories/GHSA-67mh-4wv8-2f99
+esbuild allows arbitrary file read when running the development server on Windows - https://github.com/advisories/GHSA-g7r4-m6w7-qqqr
+fix available via `npm audit fix --force`
+Will install vitest@4.1.9, which is a breaking change
+node_modules/@yao-pkg/pkg/node_modules/esbuild
+node_modules/esbuild
+node_modules/vite/node_modules/esbuild
+  @yao-pkg/pkg  >=6.14.0
+  Depends on vulnerable versions of esbuild
+  node_modules/@yao-pkg/pkg
+  vite  <=6.4.2
+  Depends on vulnerable versions of esbuild
+  node_modules/vite
+    @vitest/mocker  <=3.0.0-beta.4
+    Depends on vulnerable versions of vite
+    node_modules/@vitest/mocker
+      vitest  <=3.2.5
+      Depends on vulnerable versions of @vitest/mocker
+      Depends on vulnerable versions of vite
+      Depends on vulnerable versions of vite-node
+      node_modules/vitest
+        @vitest/coverage-v8  <=3.2.5
+        Depends on vulnerable versions of vitest
+        node_modules/@vitest/coverage-v8
+    vite-node  <=2.2.0-beta.2
+    Depends on vulnerable versions of vite
+    node_modules/vite-node
+
+form-data  4.0.0 - 4.0.5
+Severity: high
+form-data: CRLF injection in form-data via unescaped multipart field names and filenames - https://github.com/advisories/GHSA-hmw2-7cc7-3qxx
+fix available via `npm audit fix`
+node_modules/form-data
+
+js-yaml  <=4.1.1
+Severity: moderate
+JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases - https://github.com/advisories/GHSA-h67p-54hq-rp68
+fix available via `npm audit fix`
+node_modules/js-yaml
+
+shell-quote  1.1.0 - 1.8.3
+Severity: critical
+shell-quote quote() does not escape newlines in object .op values - https://github.com/advisories/GHSA-w7jw-789q-3m8p
+fix available via `npm audit fix`
+node_modules/shell-quote
+  concurrently  9.2.1
+  Depends on vulnerable versions of shell-quote
+  node_modules/concurrently
+
+tar  <=7.5.15
+Severity: moderate
+node-tar applies PAX size override to intermediary GNU long-name/long-link headers, causing tar parser interpretation differential (file smuggling) - https://github.com/advisories/GHSA-vmf3-w455-68vh
+fix available via `npm audit fix`
+node_modules/tar
+
+
+
+12 vulnerabilities (1 low, 5 moderate, 2 high, 4 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
