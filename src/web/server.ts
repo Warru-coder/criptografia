@@ -22,14 +22,22 @@ export function createServer(): express.Application {
 
   if (env.trustProxy) app.set('trust proxy', 1);
 
+  // CRIT-05 / ADR-006: strict CSP — no 'unsafe-inline'. All scripts live in /js/app.js,
+  // all styles in /css/styles.css. Programmatic .style.x = y assignments are allowed by
+  // CSP (they don't count as inline styles), but new <style> blocks or style="..." in
+  // generated HTML will be blocked.
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'"],
         connectSrc: ["'self'"],
         imgSrc: ["'self'", 'data:'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
       },
     },
   }));

@@ -611,11 +611,14 @@ if (auditBtn) {
 }
 
 function renderAuditResults(result) {
-  const riskColors = { low: '#00ff41', medium: '#ffcc00', high: '#ff8800', critical: '#ff0040' };
-  const color = riskColors[result.riskLevel] || '#888';
+  // CSP-safe: colors come from CSS classes (.risk-low/.risk-medium/.risk-high/.risk-critical)
+  // instead of inline style="color:..."
+  const riskClass = ['low', 'medium', 'high', 'critical'].includes(result.riskLevel)
+    ? `risk-${result.riskLevel}`
+    : 'risk-unknown';
   let html = `
     <div class="audit-header">
-      <span class="risk-badge" style="color:${color};border-color:${color}">${result.riskLevel.toUpperCase()}</span>
+      <span class="risk-badge ${riskClass}">${result.riskLevel.toUpperCase()}</span>
       <span class="audit-score">Score: <strong>${result.score}/100</strong></span>
       <span class="audit-date">${new Date(result.checkedAt).toLocaleTimeString()}</span>
     </div>

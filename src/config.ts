@@ -65,10 +65,24 @@ export const env = {
   uploadLimitBytes: num(process.env.UPLOAD_LIMIT_MB, 10 * 1024) * 1024 * 1024,
 } as const;
 
-// Warn in production if SERVER_SECRET is not set
-if (env.nodeEnv === 'production' && !env.serverSecret) {
-  console.error('[SecureCrypt] FATAL: SERVER_SECRET must be set in production. Exiting.');
-  process.exit(1);
+// CRIT-04 / ADR-005: SERVER_SECRET is validated UNCONDITIONALLY when WebAuthn is enabled,
+// regardless of NODE_ENV. The previous behaviour (production-only check) silently allowed
+// dev/test environments to wrap user master keys with an effectively all-zero KEK.
+if (env.enableWebAuthn) {
+  if (!env.serverSecret) {
+    console.error(
+      '[SecureCrypt] FATAL: SERVER_SECRET is required when WebAuthn is enabled.\n' +
+      '  Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"',
+    );
+    process.exit(1);
+  }
+  if (env.serverSecret.length < 32) {
+    console.error(
+      `[SecureCrypt] FATAL: SERVER_SECRET must be ≥32 characters (got ${env.serverSecret.length}).\n` +
+      '  Recommended: 44-char base64 of crypto.randomBytes(32).',
+    );
+    process.exit(1);
+  }
 }
 
 // ─── Runtime CLI config (persisted in {dataDir}/config.json) ─────────────────

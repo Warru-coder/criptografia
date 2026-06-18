@@ -762,6 +762,13 @@ input::placeholder {
   letter-spacing: 1px;
 }
 
+/* CRIT-05 fix: risk colors as CSS classes instead of inline style */
+.risk-badge.risk-low      { color: #00ff41; border-color: #00ff41; }
+.risk-badge.risk-medium   { color: #ffcc00; border-color: #ffcc00; }
+.risk-badge.risk-high     { color: #ff8800; border-color: #ff8800; }
+.risk-badge.risk-critical { color: #ff0040; border-color: #ff0040; }
+.risk-badge.risk-unknown  { color: #888;    border-color: #888;    }
+
 .audit-score {
   font-size: 0.85rem;
   color: var(--text-primary);
