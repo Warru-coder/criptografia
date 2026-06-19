@@ -7,19 +7,32 @@ export interface UserRow {
   passwordHash: string;
   salt: string;
   wrappedKey: string | null;
+  masterSalt: string | null;       // ADR-0012: replaces master.hash vault file
+  wrappedKeyVersion: number | null; // 2 = HKDF/SERVER_SECRET (current), 3 = PRF (future)
   createdAt: string;
   lastLoginAt: string | null;
 }
 
-export function createUser(username: string, passwordHash: string, salt: string): UserRow {
+export function createUser(username: string, passwordHash: string, salt: string, masterSalt?: string): UserRow {
   const db = getDb();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO users (id, username, passwordHash, salt, createdAt)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(id, username, passwordHash, salt, now);
-  return { id, username, passwordHash, salt, wrappedKey: null, createdAt: now, lastLoginAt: null };
+    INSERT INTO users (id, username, passwordHash, salt, masterSalt, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, username, passwordHash, salt, masterSalt ?? null, now);
+  return {
+    id, username, passwordHash, salt,
+    wrappedKey: null,
+    masterSalt: masterSalt ?? null,
+    wrappedKeyVersion: null,
+    createdAt: now,
+    lastLoginAt: null,
+  };
+}
+
+export function setMasterSalt(userId: string, masterSalt: string): void {
+  getDb().prepare('UPDATE users SET masterSalt = ? WHERE id = ?').run(masterSalt, userId);
 }
 
 export function findUserByUsername(username: string): UserRow | undefined {

@@ -19,10 +19,30 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npm run lint
 
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --legacy-peer-deps
+      - name: npm audit production deps (fail on high/critical)
+        run: npm audit --omit=dev --audit-level=high
+      - name: npm audit full (advisory, devDeps included)
+        run: npm audit --audit-level=high || echo "::warning::devDependency vulnerabilities present — see ADR-0007 (pending)"
+      - name: Dependency Review (PRs only)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
   test:
     name: Test + Coverage
     runs-on: windows-latest
-    needs: lint
+    needs: [lint, security-audit]
     env:
       NODE_ENV: test
       SESSION_TTL_MINUTES: '30'

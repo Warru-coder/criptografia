@@ -4,8 +4,9 @@ import { pipeline } from 'stream/promises';
 import {
   AUTH_TAG_LENGTH,
   STREAM_HIGH_WATER_MARK,
+  FILE_VERSION_V2,
 } from '../core/constants';
-import { deriveFileKey } from './keyDerivation';
+import { deriveFileKeyHKDF } from './keyDerivation';
 import { generateIv, generateSalt, secureClear } from './cryptoUtils';
 import { buildHeader, writeMetadata } from '../filesystem/fileMetadata';
 
@@ -34,13 +35,14 @@ export async function encryptFile(
   const salt = generateSalt();
   const iv = generateIv();
 
-  const fileKey = await deriveFileKey(masterKey.toString('base64'), salt);
+  // ALTA-01 / ADR-0007: HKDF instead of Argon2id-over-key.
+  const fileKey = deriveFileKeyHKDF(masterKey, salt);
 
   const cipher = crypto.createCipheriv('aes-256-gcm', fileKey, iv, {
     authTagLength: AUTH_TAG_LENGTH,
   });
 
-  const header = buildHeader(salt, iv, inputPath, totalSize);
+  const header = buildHeader(salt, iv, inputPath, totalSize, FILE_VERSION_V2);
   fs.writeFileSync(outputPath, header);
 
   const readStream = fs.createReadStream(inputPath, {

@@ -1,56 +1,50 @@
 import { describe, it, expect } from 'vitest';
 import { validatePassword, getPasswordStrength } from '../../../src/passwordManager/passwordValidator';
 
-describe('passwordValidator', () => {
-  it('should reject short passwords', () => {
-    const result = validatePassword('Short1!');
-    expect(result.isValid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
+// ALTA-08 / ADR-0011: NIST SP 800-63B password policy tests.
+
+describe('passwordValidator (NIST 800-63B)', () => {
+  it('rejects passwords shorter than 12 chars', () => {
+    const r = validatePassword('Short1!aaa');  // 10 chars
+    expect(r.isValid).toBe(false);
+    expect(r.errors.join(' ')).toMatch(/12 characters/);
   });
 
-  it('should reject passwords without uppercase', () => {
-    const result = validatePassword('lowercase123!');
-    expect(result.isValid).toBe(false);
-    expect(result.errors.some((e) => e.includes('uppercase'))).toBe(true);
+  it('accepts a long passphrase with no composition rules', () => {
+    const r = validatePassword('correct horse battery staple');
+    expect(r.isValid).toBe(true);
+    expect(r.errors).toHaveLength(0);
   });
 
-  it('should reject passwords without lowercase', () => {
-    const result = validatePassword('UPPERCASE123!');
-    expect(result.isValid).toBe(false);
-    expect(result.errors.some((e) => e.includes('lowercase'))).toBe(true);
+  it('does NOT require uppercase / lowercase / digit / special', () => {
+    const r = validatePassword('the brown fox jumps');  // 19 lowercase + spaces
+    expect(r.isValid).toBe(true);
   });
 
-  it('should reject passwords without numbers', () => {
-    const result = validatePassword('NoNumbersHere!');
-    expect(result.isValid).toBe(false);
-    expect(result.errors.some((e) => e.includes('number'))).toBe(true);
+  it('rejects blocked-list common passwords', () => {
+    expect(validatePassword('password123').isValid).toBe(false);
+    expect(validatePassword('qwertyuiop').isValid).toBe(false);
+    expect(validatePassword('letmeinplease').isValid).toBe(true); // not on list, long enough
   });
 
-  it('should reject passwords without special characters', () => {
-    const result = validatePassword('NoSpecial123');
-    expect(result.isValid).toBe(false);
-    expect(result.errors.some((e) => e.includes('special'))).toBe(true);
+  it('rejects 4+ identical characters in a row', () => {
+    const r = validatePassword('aaaa12345xyz!');
+    expect(r.isValid).toBe(false);
+    expect(r.errors.join(' ')).toMatch(/identical characters/);
   });
 
-  it('should accept strong passwords', () => {
-    const result = validatePassword('Str0ng!Pass');
-    expect(result.isValid).toBe(true);
-    expect(result.errors).toHaveLength(0);
+  it('rejects long sequential runs (12345, qwerty)', () => {
+    expect(validatePassword('zx 123456 zxcv').isValid).toBe(false);
+    expect(validatePassword('a qwerty x12345').isValid).toBe(false);
   });
 
-  it('should reject common passwords', () => {
-    const result = validatePassword('password');
-    expect(result.isValid).toBe(false);
+  it('higher entropy → higher score', () => {
+    const low = validatePassword('aaaaabbbbbccc');  // repeated, blocked → low
+    const high = validatePassword('Jp9-x!K2qTm#Z4');
+    expect(high.score).toBeGreaterThan(low.score);
   });
 
-  it('should return correct strength score', () => {
-    const weak = validatePassword('Weak1!aa');
-    const strong = validatePassword('V3ry!Str0ng#Pass');
-
-    expect(weak.score).toBeLessThan(strong.score);
-  });
-
-  it('should return strength labels', () => {
+  it('strength labels map as expected', () => {
     expect(getPasswordStrength(1)).toBe('Weak');
     expect(getPasswordStrength(3)).toBe('Moderate');
     expect(getPasswordStrength(5)).toBe('Strong');

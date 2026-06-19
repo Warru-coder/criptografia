@@ -13,7 +13,8 @@ constexpr size_t AES_KEY_SIZE = 32;
 constexpr size_t GCM_IV_SIZE = 16;
 constexpr size_t GCM_TAG_SIZE = 16;
 constexpr size_t SALT_SIZE = 16;
-constexpr size_t PBKDF2_ITERATIONS = 100000;
+// CRIT-01 fix / ADR-0003: real PBKDF2-HMAC-SHA256 with OWASP 2024 iteration count.
+constexpr size_t PBKDF2_ITERATIONS = 600000;
 constexpr size_t HASH_SIZE = 32;
 
 struct EncryptedData {

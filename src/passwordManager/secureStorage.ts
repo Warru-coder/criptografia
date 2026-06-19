@@ -66,6 +66,45 @@ export async function getMasterKey(userId: string, password: string): Promise<Bu
   return deriveKey(password, salt);
 }
 
+/**
+ * MED-04 / ADR-0014: atomic password rotation.
+ *
+ * Re-derives both the storage hash and the masterKey-derivation salt, persists
+ * them, and returns the new masterKey. Caller is responsible for invalidating
+ * the user's sessions (except possibly the current one) and any wrapped keys
+ * derived from the old masterKey.
+ *
+ * Atomicity: we write the new vault file to a sibling path and rename. If the
+ * rename fails the old vault is untouched.
+ */
+export async function changeMasterPassword(
+  userId: string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<Buffer> {
+  if (!isVaultInitialized(userId)) throw new PasswordError('Vault not initialized for this user.');
+
+  const ok = await verifyMasterPassword(userId, oldPassword);
+  if (!ok) throw new PasswordError('Current password is incorrect.');
+
+  const { hash, salt } = await deriveKeyForStorage(newPassword);
+  const record: MasterPasswordRecord = {
+    algorithm: 'argon2id',
+    version: 19,
+    params: { memoryCost: 65536, timeCost: 3, parallelism: 2 },
+    hash,
+    salt: salt.toString('base64'),
+    createdAt: new Date().toISOString(),
+  };
+
+  const finalPath = vaultFilePath(userId);
+  const tmpPath = finalPath + '.new';
+  fs.writeFileSync(tmpPath, JSON.stringify(record, null, 2), 'utf-8');
+  fs.renameSync(tmpPath, finalPath);
+
+  return deriveKey(newPassword, salt);
+}
+
 // ─── Legacy single-user compat (CLI / init command) ──────────────────────────
 // The CLI uses a shared "default" user stored under userId = 'default'.
 

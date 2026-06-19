@@ -1,7 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+import picomatch from 'picomatch';
 import { SYSTEM_EXCLUSIONS, ENCRYPTED_EXTENSION } from '../core/constants';
 import { FileError } from '../core/errorHandler';
+
+// MED-02 / ADR-0009: use picomatch instead of the artisanal regex.
+// SYSTEM_EXCLUSIONS uses Windows-style backslashes; picomatch wants forward
+// slashes, so we normalise both pattern and candidate. Patterns are matched
+// case-insensitively (Windows convention).
+const EXCLUSION_MATCHERS = SYSTEM_EXCLUSIONS.map((p) =>
+  picomatch(p.replace(/\\/g, '/'), { nocase: true, dot: true }),
+);
 
 export interface FileEntry {
   path: string;
@@ -44,22 +53,8 @@ export function scanDirectory(dirPath: string): FileEntry[] {
 }
 
 export function isExcluded(filePath: string): boolean {
-  const normalizedPath = filePath.toLowerCase();
-
-  for (const pattern of SYSTEM_EXCLUSIONS) {
-    const regexPattern = pattern
-      .toLowerCase()
-      .replace(/\\/g, '\\\\')
-      .replace(/\*\*/g, '.*')
-      .replace(/\*/g, '[^\\\\]*');
-
-    const regex = new RegExp(`^${regexPattern}$`);
-    if (regex.test(normalizedPath)) {
-      return true;
-    }
-  }
-
-  return false;
+  const candidate = filePath.replace(/\\/g, '/');
+  return EXCLUSION_MATCHERS.some((m) => m(candidate));
 }
 
 export function getOutputPath(

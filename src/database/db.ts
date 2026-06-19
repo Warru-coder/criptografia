@@ -60,4 +60,21 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expiresAt);
     CREATE INDEX IF NOT EXISTS idx_wa_user          ON webauthn_credentials(userId);
   `);
+
+  // ADR-0012 exec / ALTA-02: idempotent ALTER TABLE to add masterSalt.
+  // SQLite doesn't support ADD COLUMN IF NOT EXISTS pre-3.35, so detect via PRAGMA.
+  addColumnIfMissing(db, 'users', 'masterSalt', 'TEXT');
+  // ADR-0015 / ALTA-06 (scaffolding): per-credential PRF salt for WebAuthn PRF
+  // extension. Stays NULL for credentials registered before PRF support landed.
+  addColumnIfMissing(db, 'webauthn_credentials', 'prfSalt', 'TEXT');
+  // Track wrap format version per user (1 = legacy SERVER_SECRET-padded,
+  // 2 = HKDF over SERVER_SECRET, 3 = future PRF-derived KEK).
+  addColumnIfMissing(db, 'users', 'wrappedKeyVersion', 'INTEGER');
+}
+
+function addColumnIfMissing(db: Database.Database, table: string, column: string, type: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
 }

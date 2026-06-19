@@ -19,6 +19,7 @@ import {
   updateCounter,
 } from '../../database/webauthnRepository';
 import { createSession, SESSION_TTL_MS, getSession } from '../session/sessionStore';
+import { setSessionCookies, generateCsrfToken, readSessionTokenFromCookie } from '../session/cookieSession';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
@@ -28,30 +29,65 @@ const pendingRegistration = new Map<string, string>();
 const pendingAuthentication = new Map<string, string>();
 
 function extractToken(req: express.Request): string | undefined {
+  const fromCookie = readSessionTokenFromCookie(req);
+  if (fromCookie) return fromCookie;
   const h = req.headers.authorization;
   if (h?.startsWith('Bearer ')) return h.slice(7);
   return undefined;
 }
 
-// Encrypt master key with server secret so it can be stored and recovered without password
+// CRIT-03 / ADR-005: wrap master key using HKDF-derived KEK from SERVER_SECRET.
+// Previous version padded the raw secret with '0' bytes → low entropy when secret was short.
+// Now: SERVER_SECRET must be ≥32 bytes (enforced at startup, see src/config.ts), and
+// the actual KEK is derived via HKDF-SHA256 with explicit domain separation.
+const WRAP_KEY_INFO = Buffer.from('SecureCrypt-v2-webauthn-wrap-key');
+const WRAP_FORMAT_VERSION = 0x02;
+
+function deriveWrapKey(): Buffer {
+  // SERVER_SECRET length is validated at startup; this is a defensive assert.
+  if (!env.serverSecret || env.serverSecret.length < 32) {
+    throw new Error('SERVER_SECRET must be ≥32 chars when WebAuthn is enabled.');
+  }
+  const seed = Buffer.from(env.serverSecret, 'utf-8');
+  const ab = crypto.hkdfSync('sha256', seed, Buffer.alloc(0), WRAP_KEY_INFO, 32);
+  return Buffer.from(ab);
+}
+
 function wrapMasterKey(masterKey: Buffer): string {
-  const secret = Buffer.from(env.serverSecret.padEnd(32, '0').slice(0, 32));
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', secret, iv);
-  const encrypted = Buffer.concat([cipher.update(masterKey), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, encrypted]).toString('base64');
+  const kek = deriveWrapKey();
+  try {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', kek, iv);
+    const encrypted = Buffer.concat([cipher.update(masterKey), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    // Layout: [version:1][iv:12][tag:16][ciphertext:N]
+    return Buffer.concat([Buffer.from([WRAP_FORMAT_VERSION]), iv, tag, encrypted]).toString('base64');
+  } finally {
+    kek.fill(0);
+  }
 }
 
 function unwrapMasterKey(wrapped: string): Buffer {
   const buf = Buffer.from(wrapped, 'base64');
-  const secret = Buffer.from(env.serverSecret.padEnd(32, '0').slice(0, 32));
-  const iv = buf.subarray(0, 12);
-  const tag = buf.subarray(12, 28);
-  const encrypted = buf.subarray(28);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', secret, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  const version = buf[0];
+  if (version !== WRAP_FORMAT_VERSION) {
+    // v1 (pre-CRIT-03 fix) wrapped keys are no longer accepted: user must re-link
+    // their passkey by logging in with their password (which re-wraps with v2).
+    throw new Error(
+      `Wrapped key format v${version} is not supported. Log in with your password and re-link the passkey.`,
+    );
+  }
+  const kek = deriveWrapKey();
+  try {
+    const iv = buf.subarray(1, 13);
+    const tag = buf.subarray(13, 29);
+    const encrypted = buf.subarray(29);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', kek, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  } finally {
+    kek.fill(0);
+  }
 }
 
 // POST /api/auth/webauthn/registration-options
@@ -233,8 +269,12 @@ router.post('/authentication-verify', async (req, res) => {
     updateLastLogin(user.id);
     logger.info(`WebAuthn login for user: ${user.username}`);
 
+    // ADR-0016 / Fase 4.C: emit session cookie + CSRF token for dual-mode auth.
+    const csrfToken = generateCsrfToken();
+    setSessionCookies(res, token, csrfToken);
     res.json({
       sessionToken: token,
+      csrfToken,
       expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
       userId: user.id,
     });

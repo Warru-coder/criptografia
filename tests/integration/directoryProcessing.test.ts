@@ -6,7 +6,13 @@ import crypto from 'crypto';
 import { encryptDirectory, decryptDirectory } from '../../src/filesystem/directoryProcessor';
 import { ENCRYPTED_EXTENSION } from '../../src/core/constants';
 
-const testDir = path.join(os.tmpdir(), 'securecrypt-dir-test-' + Date.now());
+// NOTE: on Windows, os.tmpdir() lives under AppData which is in SYSTEM_EXCLUSIONS
+// (after MED-02 fix the matcher actually works). Use a project-local temp dir.
+const isWin = process.platform === 'win32';
+const testDir = path.join(
+  isWin ? path.join(process.cwd(), '.test-tmp') : os.tmpdir(),
+  'securecrypt-dir-test-' + Date.now(),
+);
 const inputDir = path.join(testDir, 'input');
 const encryptedDir = path.join(testDir, 'encrypted');
 const decryptedDir = path.join(testDir, 'decrypted');

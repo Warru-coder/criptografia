@@ -22,23 +22,41 @@ const upload = multer({
   limits: { fileSize: env.uploadLimitBytes },
 });
 
-const progressClients: Set<express.Response> = new Set();
+// MED-05 / ADR-0013: per-user SSE channel. The previous version maintained a
+// single Set<Response> for all clients and broadcast everything to everyone,
+// leaking filenames between users. Now keyed by userId.
+const progressClientsByUser: Map<string, Set<express.Response>> = new Map();
 
-export function broadcastProgress(progress: Record<string, unknown>): void {
+export function broadcastProgress(userId: string, progress: Record<string, unknown>): void {
+  const set = progressClientsByUser.get(userId);
+  if (!set || set.size === 0) return;
   const data = `data: ${JSON.stringify(progress)}\n\n`;
-  for (const res of progressClients) {
+  for (const res of set) {
     res.write(data);
   }
 }
 
-router.get('/progress', (_req, res) => {
+router.get('/progress', requireSession, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  progressClients.add(res);
-  _req.on('close', () => progressClients.delete(res));
+  const uid = req.userId;
+  let set = progressClientsByUser.get(uid);
+  if (!set) {
+    set = new Set();
+    progressClientsByUser.set(uid, set);
+  }
+  set.add(res);
+
+  req.on('close', () => {
+    const s = progressClientsByUser.get(uid);
+    if (s) {
+      s.delete(res);
+      if (s.size === 0) progressClientsByUser.delete(uid);
+    }
+  });
 });
 
 // SEC-004: file encryption/decryption uses session auth — password never leaves login endpoint
@@ -54,7 +72,7 @@ router.post('/encrypt', requireSession, upload.single('file'), async (req, res) 
 
     const masterKey = req.masterKey;
     await encryptFile(tmpInput!, tmpOutput!, masterKey, (progress: EncryptProgress) => {
-      broadcastProgress({ type: 'encrypt', filename: req.file?.originalname, ...progress });
+      broadcastProgress(req.userId, { type: 'encrypt', filename: req.file?.originalname, ...progress });
     });
 
     const fileStat = fs.statSync(tmpOutput!);
@@ -86,7 +104,7 @@ router.post('/decrypt', requireSession, upload.single('file'), async (req, res) 
 
     const masterKey = req.masterKey;
     await decryptFile(tmpInput!, tmpOutput!, masterKey, (progress: DecryptProgress) => {
-      broadcastProgress({ type: 'decrypt', filename: req.file?.originalname, ...progress });
+      broadcastProgress(req.userId, { type: 'decrypt', filename: req.file?.originalname, ...progress });
     });
 
     const fileStat = fs.statSync(tmpOutput!);
@@ -139,7 +157,7 @@ router.post('/encrypt-dir', requireSession, async (req, res) => {
 
     const masterKey = req.masterKey;
     const result = await encryptDirectory(safeInput, safeOutput, masterKey, (progress: DirectoryProgress) => {
-      broadcastProgress({ type: 'encrypt-dir', ...progress });
+      broadcastProgress(req.userId, { type: 'encrypt-dir', ...progress });
     });
 
     logger.info(`Directory encrypted via web UI: ${safeInput}`);
@@ -184,7 +202,7 @@ router.post('/decrypt-dir', requireSession, async (req, res) => {
 
     const masterKey = req.masterKey;
     const result = await decryptDirectory(safeInput, safeOutput, masterKey, (progress: DirectoryProgress) => {
-      broadcastProgress({ type: 'decrypt-dir', ...progress });
+      broadcastProgress(req.userId, { type: 'decrypt-dir', ...progress });
     });
 
     logger.info(`Directory decrypted via web UI: ${safeInput}`);
@@ -205,7 +223,15 @@ router.get('/status', (_req, res) => {
   });
 });
 
-router.post('/verify', upload.single('file'), async (req, res) => {
+// ALTA-09 / ADR-0013: /verify requires session and reads only the header
+// (148 bytes) from disk instead of the whole upload — closes both the
+// "anonymous DoS via 10 GB upload" hole and the "load whole file" memory waste.
+//
+// We use a verify-specific multer with a 1 MiB limit (more than the 148 bytes
+// we need, but enough margin to still accept the upload framing).
+const verifyUpload = multer({ dest: env.tmpDir, limits: { fileSize: 1 * 1024 * 1024 } });
+
+router.post('/verify', requireSession, verifyUpload.single('file'), async (req, res) => {
   const tmpPath = req.file?.path;
   try {
     if (!req.file || !tmpPath) {
@@ -213,24 +239,34 @@ router.post('/verify', upload.single('file'), async (req, res) => {
       return;
     }
 
-    const fileBuffer = fs.readFileSync(tmpPath);
-
-    if (fileBuffer.length < 148) {
+    const fileSize = req.file.size;
+    if (fileSize < 148) {
       res.status(400).json({ error: 'File too small to be a valid encrypted file' });
       return;
     }
 
-    const magic = fileBuffer.subarray(0, 6).toString();
+    // Read only the header bytes (no full-file load into memory).
+    const fd = await fs.promises.open(tmpPath, 'r');
+    const headerBuf = Buffer.alloc(148);
+    try {
+      await fd.read(headerBuf, 0, 148, 0);
+    } finally {
+      await fd.close();
+    }
+
+    const magic = headerBuf.subarray(0, 6).toString();
     const isValidMagic = magic === 'SCRYPT';
-    const hasAuthTag = fileBuffer.length > 128 + 16;
+    const version = isValidMagic ? headerBuf.readUInt8(6) : null;
+    const hasAuthTag = fileSize > 128 + 16;
 
     res.json({
       valid: isValidMagic,
       isEncryptedFile: isValidMagic,
+      version,
       hasAuthTag,
-      fileSize: fileBuffer.length,
+      fileSize,
       message: isValidMagic
-        ? 'File appears to be a valid SecureCrypt encrypted file'
+        ? `File appears to be a valid SecureCrypt v${version} encrypted file`
         : 'File is not a SecureCrypt encrypted file',
     });
   } catch (error) {

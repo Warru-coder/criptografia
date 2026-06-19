@@ -11,21 +11,19 @@ constexpr size_t BUFFER_SIZE = 65536;
 
 CryptoEngine::CryptoEngine() : m_hAesAlg(NULL), m_hHashAlg(NULL), m_hPbkdf2Alg(NULL) {
     NTSTATUS status;
-    
+
     status = BCryptOpenAlgorithmProvider(&m_hAesAlg, BCRYPT_AES_ALGORITHM, NULL, 0);
     CheckStatus(status, "BCryptOpenAlgorithmProvider AES");
-    
+
     status = BCryptSetProperty(m_hAesAlg, BCRYPT_CHAINING_MODE, (PBYTE)BCRYPT_CHAIN_MODE_GCM, sizeof(BCRYPT_CHAIN_MODE_GCM), 0);
     CheckStatus(status, "BCryptSetProperty GCM");
-    
+
     status = BCryptOpenAlgorithmProvider(&m_hHashAlg, BCRYPT_SHA256_ALGORITHM, NULL, 0);
     CheckStatus(status, "BCryptOpenAlgorithmProvider SHA256");
-    
-    status = BCryptOpenAlgorithmProvider(&m_hPbkdf2Alg, BCRYPT_SP800108_CTR_ALGORITHM, NULL, 0);
-    if (!BCRYPT_SUCCESS(status)) {
-        // Fallback: use PBKDF2 via CryptDeriveKey or manual implementation
-        m_hPbkdf2Alg = NULL;
-    }
+
+    // CRIT-01 fix / ADR-0003: open SHA-256 in HMAC mode for BCryptDeriveKeyPBKDF2.
+    status = BCryptOpenAlgorithmProvider(&m_hPbkdf2Alg, BCRYPT_SHA256_ALGORITHM, NULL, BCRYPT_ALG_HANDLE_HMAC_FLAG);
+    CheckStatus(status, "BCryptOpenAlgorithmProvider HMAC-SHA256 (PBKDF2)");
 }
 
 CryptoEngine::~CryptoEngine() {
@@ -128,46 +126,46 @@ std::vector<BYTE> CryptoEngine::DecryptData(const EncryptedData& encryptedData, 
     return AesGcmDecrypt(encryptedData.ciphertext, key, encryptedData.iv, encryptedData.authTag);
 }
 
+// CRIT-01 fix / ADR-0003: real PBKDF2-HMAC-SHA256 via BCryptDeriveKeyPBKDF2.
+// Previous implementation iterated CryptHashData without finalizing → constant-time
+// single SHA-256 regardless of PBKDF2_ITERATIONS. This made the announced
+// "600.000 iterations" purely cosmetic. We now use the CNG primitive.
+//
+// Password encoding: UTF-8 (was UTF-16 in the broken version). UTF-8 is the
+// portable convention; the rest of the codebase (Node/Web) uses UTF-8 implicitly.
+// Files produced before this fix are NOT decryptable with this function; they
+// must go through a legacy path or be re-encrypted.
 std::vector<BYTE> CryptoEngine::DeriveKey(const std::wstring& password, const std::vector<BYTE>& salt, size_t keyLength) {
-    HCRYPTPROV hProv = NULL;
-    HCRYPTHASH hHash = NULL;
-    HCRYPTKEY hKey = NULL;
-    
+    if (!m_hPbkdf2Alg) {
+        throw std::runtime_error("HMAC-SHA256 provider not initialised — cannot derive key");
+    }
+
+    // Convert wide-string password to UTF-8 bytes.
+    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, password.c_str(), static_cast<int>(password.size()), NULL, 0, NULL, NULL);
+    if (utf8Len <= 0) {
+        throw std::runtime_error("Password UTF-8 conversion failed");
+    }
+    std::vector<BYTE> passwordBytes(utf8Len);
+    WideCharToMultiByte(CP_UTF8, 0, password.c_str(), static_cast<int>(password.size()),
+                        reinterpret_cast<LPSTR>(passwordBytes.data()), utf8Len, NULL, NULL);
+
     std::vector<BYTE> derivedKey(keyLength);
-    
-    if (!CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
-        throw std::runtime_error("CryptAcquireContext failed");
-    }
-    
-    if (!CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)) {
-        CryptReleaseContext(hProv, 0);
-        throw std::runtime_error("CryptCreateHash failed");
-    }
-    
-    std::vector<BYTE> passwordBytes(password.size() * sizeof(wchar_t));
-    memcpy(passwordBytes.data(), password.c_str(), passwordBytes.size());
-    
-    for (DWORD i = 0; i < PBKDF2_ITERATIONS / 1000; ++i) {
-        if (!CryptHashData(hHash, salt.data(), static_cast<DWORD>(salt.size()), 0)) {
-            break;
-        }
-        if (!CryptHashData(hHash, passwordBytes.data(), static_cast<DWORD>(passwordBytes.size()), 0)) {
-            break;
-        }
-    }
-    
-    DWORD hashSize = static_cast<DWORD>(derivedKey.size());
-    if (!CryptGetHashParam(hHash, HP_HASHVAL, derivedKey.data(), &hashSize, 0)) {
-        CryptDestroyHash(hHash);
-        CryptReleaseContext(hProv, 0);
-        SecureZeroMemory(passwordBytes.data(), passwordBytes.size());
-        throw std::runtime_error("CryptGetHashParam failed");
-    }
-    
-    CryptDestroyHash(hHash);
-    CryptReleaseContext(hProv, 0);
+
+    NTSTATUS status = BCryptDeriveKeyPBKDF2(
+        m_hPbkdf2Alg,
+        passwordBytes.data(), static_cast<ULONG>(passwordBytes.size()),
+        const_cast<PUCHAR>(salt.data()), static_cast<ULONG>(salt.size()),
+        static_cast<ULONGLONG>(PBKDF2_ITERATIONS),
+        derivedKey.data(), static_cast<ULONG>(derivedKey.size()),
+        0);
+
     SecureZeroMemory(passwordBytes.data(), passwordBytes.size());
-    
+
+    if (!BCRYPT_SUCCESS(status)) {
+        SecureZeroMemory(derivedKey.data(), derivedKey.size());
+        throw std::runtime_error("BCryptDeriveKeyPBKDF2 failed with status 0x" + std::to_string(status));
+    }
+
     return derivedKey;
 }
 
@@ -225,235 +223,197 @@ bool CryptoEngine::VerifyHMAC(const std::vector<BYTE>& data, const std::vector<B
     return computedHMAC == expectedHMAC;
 }
 
+// CRIT-02 fix / ADR-0004: the previous streaming implementation reused the same IV
+// per block AND only stored the tag of the last block, producing files that were
+// neither confidential (nonce reuse in GCM) nor authenticated (tag did not cover
+// the whole file).
+//
+// Interim Fase-1 fix: load the file in memory and run a single AES-GCM operation.
+// This is the same code path as AesGcmEncrypt(), which is correct.
+// Limit: 256 MiB — files larger than that should use the streaming Node/Web
+// engine until ADR-0001 (libsodium crypto_secretstream) lands in Fase 2.
+constexpr ULONGLONG MAX_INMEM_ENCRYPT_BYTES = 256ULL * 1024 * 1024;
+constexpr BYTE FILE_VERSION_V2 = 0x02;
+
 FileEncryptionResult CryptoEngine::EncryptFile(const std::wstring& inputPath, const std::wstring& outputPath, const std::vector<BYTE>& key) {
     FileEncryptionResult result;
     result.success = false;
-    
+
     HANDLE hInput = CreateFileW(inputPath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hInput == INVALID_HANDLE_VALUE) {
         result.error = L"Failed to open input file";
         return result;
     }
-    
-    HANDLE hOutput = CreateFileW(outputPath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hOutput == INVALID_HANDLE_VALUE) {
-        CloseHandle(hInput);
-        result.error = L"Failed to create output file";
-        return result;
-    }
-    
+
     LARGE_INTEGER fileSize;
     GetFileSizeEx(hInput, &fileSize);
     result.originalSize = fileSize.QuadPart;
-    
+
+    if (static_cast<ULONGLONG>(fileSize.QuadPart) > MAX_INMEM_ENCRYPT_BYTES) {
+        CloseHandle(hInput);
+        result.error = L"File too large for current C++ engine (max 256 MiB). Use the Node/Web engine for larger files. Streaming will be re-added with libsodium in v0.5.0 (ADR-0001).";
+        return result;
+    }
+
+    // Load full plaintext.
+    std::vector<BYTE> plaintext(static_cast<size_t>(fileSize.QuadPart));
+    DWORD bytesRead = 0;
+    if (fileSize.QuadPart > 0) {
+        if (!ReadFile(hInput, plaintext.data(), static_cast<DWORD>(plaintext.size()), &bytesRead, NULL) || bytesRead != plaintext.size()) {
+            CloseHandle(hInput);
+            result.error = L"Failed to read input file";
+            return result;
+        }
+    }
+    CloseHandle(hInput);
+
+    HANDLE hOutput = CreateFileW(outputPath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hOutput == INVALID_HANDLE_VALUE) {
+        SecureZeroMemory(plaintext.data(), plaintext.size());
+        result.error = L"Failed to create output file";
+        return result;
+    }
+
     try {
-        auto iv = GenerateRandomBytes(GCM_IV_SIZE);
+        // Single-shot AES-GCM via the (correct) AesGcmEncrypt primitive.
+        std::vector<BYTE> iv;       // 16-byte random nonce — assigned inside AesGcmEncrypt
+        std::vector<BYTE> authTag;  // 16-byte tag
         auto salt = GenerateRandomBytes(SALT_SIZE);
-        
-        DWORD written;
+
+        auto ciphertext = AesGcmEncrypt(plaintext, key, iv, authTag);
+
+        // Wipe plaintext from memory ASAP.
+        SecureZeroMemory(plaintext.data(), plaintext.size());
+
+        DWORD written = 0;
+        // Header (v2): MAGIC | VERSION=2 | SALT | IV | TAG | CIPHERTEXT
+        BYTE version = FILE_VERSION_V2;
         WriteFile(hOutput, FILE_MAGIC, sizeof(FILE_MAGIC), &written, NULL);
-        WriteFile(hOutput, &FILE_VERSION, 1, &written, NULL);
+        WriteFile(hOutput, &version, 1, &written, NULL);
         WriteFile(hOutput, salt.data(), static_cast<DWORD>(salt.size()), &written, NULL);
         WriteFile(hOutput, iv.data(), static_cast<DWORD>(iv.size()), &written, NULL);
-        
-        BCRYPT_KEY_HANDLE hKey = NULL;
-        NTSTATUS status = BCryptGenerateSymmetricKey(m_hAesAlg, &hKey, NULL, 0, const_cast<BYTE*>(key.data()), static_cast<ULONG>(key.size()), 0);
-        CheckStatus(status, "BCryptGenerateSymmetricKey");
-        
-        std::vector<BYTE> buffer(BUFFER_SIZE);
-        std::vector<BYTE> ciphertext(BUFFER_SIZE + GCM_TAG_SIZE);
-        
-        BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO authInfo;
-        
-        ULONGLONG totalRead = 0;
-        BOOL isLastBlock = FALSE;
-        
-        while (!isLastBlock) {
-            DWORD bytesRead = 0;
-            ReadFile(hInput, buffer.data(), static_cast<DWORD>(buffer.size()), &bytesRead, NULL);
-            
-            if (bytesRead < buffer.size()) {
-                isLastBlock = TRUE;
-            }
-            
-            BCRYPT_INIT_AUTH_MODE_INFO(authInfo);
-            authInfo.pbNonce = iv.data();
-            authInfo.cbNonce = static_cast<ULONG>(iv.size());
-            
-            ULONG cbResult = 0;
-            status = BCryptEncrypt(hKey,
-                buffer.data(), bytesRead,
-                &authInfo, NULL, 0,
-                ciphertext.data(), static_cast<ULONG>(ciphertext.size()),
-                &cbResult, 0);
-            
-            if (!BCRYPT_SUCCESS(status) && !isLastBlock) {
-                throw std::runtime_error("Encryption failed at block");
-            }
-            
-            if (isLastBlock) {
-                authInfo.pbTag = ciphertext.data() + cbResult;
-                authInfo.cbTag = GCM_TAG_SIZE;
-                
-                std::vector<BYTE> authTag(GCM_TAG_SIZE);
-                memcpy(authTag.data(), authInfo.pbTag, GCM_TAG_SIZE);
-                
-                WriteFile(hOutput, ciphertext.data(), cbResult, &written, NULL);
-                WriteFile(hOutput, authTag.data(), GCM_TAG_SIZE, &written, NULL);
-                
-                result.hmac = ComputeHMAC(ciphertext, key);
-            } else {
-                WriteFile(hOutput, ciphertext.data(), cbResult, &written, NULL);
-            }
-            
-            totalRead += bytesRead;
-        }
-        
-        BCryptDestroyKey(hKey);
+        WriteFile(hOutput, authTag.data(), static_cast<DWORD>(authTag.size()), &written, NULL);
+        WriteFile(hOutput, ciphertext.data(), static_cast<DWORD>(ciphertext.size()), &written, NULL);
+
         result.success = true;
         result.outputPath = outputPath;
-        
+        result.hmac = authTag; // expose tag as integrity proof
     } catch (const std::exception& e) {
+        SecureZeroMemory(plaintext.data(), plaintext.size());
         result.error = std::wstring(e.what(), e.what() + strlen(e.what()));
     }
-    
-    CloseHandle(hInput);
+
     CloseHandle(hOutput);
-    
+
     if (!result.success) {
         DeleteFileW(outputPath.c_str());
     }
-    
+
     return result;
 }
 
+// CRIT-02 fix / ADR-0004: matches the single-shot EncryptFile above.
+// Header v2 layout: MAGIC(6) | VERSION(1) | SALT(16) | IV(16) | TAG(16) | CIPHERTEXT(N).
+// v1 files (broken streaming) are rejected with a clear error — they were unsafe
+// anyway (nonce reuse, no real authentication).
 FileEncryptionResult CryptoEngine::DecryptFile(const std::wstring& inputPath, const std::wstring& outputPath, const std::vector<BYTE>& key) {
     FileEncryptionResult result;
     result.success = false;
-    
+
     HANDLE hInput = CreateFileW(inputPath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hInput == INVALID_HANDLE_VALUE) {
         result.error = L"Failed to open input file";
         return result;
     }
-    
-    HANDLE hOutput = CreateFileW(outputPath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hOutput == INVALID_HANDLE_VALUE) {
+
+    LARGE_INTEGER inputFileSize;
+    GetFileSizeEx(hInput, &inputFileSize);
+
+    constexpr size_t HEADER_SIZE = sizeof(FILE_MAGIC) + 1 + SALT_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE;
+    if (static_cast<ULONGLONG>(inputFileSize.QuadPart) < HEADER_SIZE) {
         CloseHandle(hInput);
-        result.error = L"Failed to create output file";
+        result.error = L"File too small to be a valid SecureCrypt v2 file";
         return result;
     }
-    
+    if (static_cast<ULONGLONG>(inputFileSize.QuadPart) > MAX_INMEM_ENCRYPT_BYTES + HEADER_SIZE) {
+        CloseHandle(hInput);
+        result.error = L"File too large for current C++ engine (max 256 MiB).";
+        return result;
+    }
+
     try {
         BYTE magic[sizeof(FILE_MAGIC)];
         BYTE version;
-        DWORD bytesRead;
-        
+        DWORD bytesRead = 0;
+
         ReadFile(hInput, magic, sizeof(magic), &bytesRead, NULL);
         if (bytesRead != sizeof(magic) || memcmp(magic, FILE_MAGIC, sizeof(FILE_MAGIC)) != 0) {
-            result.error = L"Invalid file format - not a SecureCrypt file";
+            result.error = L"Invalid file format — not a SecureCrypt file";
             throw std::runtime_error("Invalid magic");
         }
-        
+
         ReadFile(hInput, &version, 1, &bytesRead, NULL);
-        if (version != FILE_VERSION) {
+        if (version == FILE_VERSION) {
+            // v1: the legacy broken format. Refuse to decrypt — the data was never
+            // safely encrypted to begin with.
+            result.error = L"File was encrypted with the broken v1 streaming format (pre-CRIT-02 fix) and cannot be decrypted safely. Restore from backup.";
+            throw std::runtime_error("Legacy v1 format rejected");
+        }
+        if (version != FILE_VERSION_V2) {
             result.error = L"Unsupported file version";
             throw std::runtime_error("Invalid version");
         }
-        
+
         std::vector<BYTE> salt(SALT_SIZE);
         std::vector<BYTE> iv(GCM_IV_SIZE);
+        std::vector<BYTE> tag(GCM_TAG_SIZE);
         ReadFile(hInput, salt.data(), static_cast<DWORD>(salt.size()), &bytesRead, NULL);
         ReadFile(hInput, iv.data(), static_cast<DWORD>(iv.size()), &bytesRead, NULL);
-        
-        BCRYPT_KEY_HANDLE hKey = NULL;
-        NTSTATUS status = BCryptGenerateSymmetricKey(m_hAesAlg, &hKey, NULL, 0, const_cast<BYTE*>(key.data()), static_cast<ULONG>(key.size()), 0);
-        CheckStatus(status, "BCryptGenerateSymmetricKey");
-        
-        std::vector<BYTE> buffer(BUFFER_SIZE + GCM_TAG_SIZE);
-        std::vector<BYTE> plaintext(BUFFER_SIZE);
-        
-        LARGE_INTEGER inputFileSize;
-        GetFileSizeEx(hInput, &inputFileSize);
-        ULONGLONG remaining = inputFileSize.QuadPart - sizeof(FILE_MAGIC) - 1 - SALT_SIZE - GCM_IV_SIZE;
-        
-        BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO authInfo;
-        
-        while (remaining > 0) {
-            BOOL isLastBlock = (remaining <= BUFFER_SIZE + GCM_TAG_SIZE);
-            DWORD bytesToRead = isLastBlock ? static_cast<DWORD>(remaining) : BUFFER_SIZE + GCM_TAG_SIZE;
-            
-            DWORD bytesRead = 0;
-            ReadFile(hInput, buffer.data(), bytesToRead, &bytesRead, NULL);
-            
-            if (isLastBlock) {
-                if (bytesRead < GCM_TAG_SIZE + 1) {
-                    result.error = L"Invalid encrypted file - truncated";
-                    throw std::runtime_error("Truncated file");
-                }
-                
-                size_t dataLen = bytesRead - GCM_TAG_SIZE;
-                std::vector<BYTE> authTag(buffer.data() + dataLen, buffer.data() + bytesRead);
-                
-                BCRYPT_INIT_AUTH_MODE_INFO(authInfo);
-                authInfo.pbNonce = iv.data();
-                authInfo.cbNonce = static_cast<ULONG>(iv.size());
-                authInfo.pbTag = authTag.data();
-                authInfo.cbTag = static_cast<ULONG>(authTag.size());
-                
-                ULONG cbResult = 0;
-                status = BCryptDecrypt(hKey,
-                    buffer.data(), static_cast<ULONG>(dataLen),
-                    &authInfo, NULL, 0,
-                    plaintext.data(), static_cast<ULONG>(plaintext.size()),
-                    &cbResult, 0);
-                
-                if (!BCRYPT_SUCCESS(status)) {
-                    result.error = L"Integrity check failed - file may be tampered";
-                    throw std::runtime_error("Integrity check failed");
-                }
-                
-                DWORD written;
-                WriteFile(hOutput, plaintext.data(), cbResult, &written, NULL);
-            } else {
-                BCRYPT_INIT_AUTH_MODE_INFO(authInfo);
-                authInfo.pbNonce = iv.data();
-                authInfo.cbNonce = static_cast<ULONG>(iv.size());
-                
-                ULONG cbResult = 0;
-                status = BCryptDecrypt(hKey,
-                    buffer.data(), static_cast<ULONG>(bytesRead),
-                    &authInfo, NULL, 0,
-                    plaintext.data(), static_cast<ULONG>(plaintext.size()),
-                    &cbResult, 0);
-                
-                if (!BCRYPT_SUCCESS(status)) {
-                    result.error = L"Decryption failed";
-                    throw std::runtime_error("Decryption failed");
-                }
-                
-                DWORD written;
-                WriteFile(hOutput, plaintext.data(), cbResult, &written, NULL);
+        ReadFile(hInput, tag.data(), static_cast<DWORD>(tag.size()), &bytesRead, NULL);
+
+        size_t ciphertextLen = static_cast<size_t>(inputFileSize.QuadPart) - HEADER_SIZE;
+        std::vector<BYTE> ciphertext(ciphertextLen);
+        if (ciphertextLen > 0) {
+            if (!ReadFile(hInput, ciphertext.data(), static_cast<DWORD>(ciphertextLen), &bytesRead, NULL) || bytesRead != ciphertextLen) {
+                result.error = L"Failed to read ciphertext";
+                throw std::runtime_error("Read failed");
             }
-            
-            remaining -= bytesRead;
         }
-        
-        BCryptDestroyKey(hKey);
+        CloseHandle(hInput);
+        hInput = INVALID_HANDLE_VALUE;
+
+        auto plaintext = AesGcmDecrypt(ciphertext, key, iv, tag);
+
+        HANDLE hOutput = CreateFileW(outputPath.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hOutput == INVALID_HANDLE_VALUE) {
+            SecureZeroMemory(plaintext.data(), plaintext.size());
+            result.error = L"Failed to create output file";
+            throw std::runtime_error("Output open failed");
+        }
+
+        DWORD written = 0;
+        if (!plaintext.empty()) {
+            WriteFile(hOutput, plaintext.data(), static_cast<DWORD>(plaintext.size()), &written, NULL);
+        }
+        CloseHandle(hOutput);
+
+        SecureZeroMemory(plaintext.data(), plaintext.size());
+
         result.success = true;
         result.outputPath = outputPath;
-        
+        result.hmac = tag;
     } catch (const std::exception& e) {
-        result.error = std::wstring(e.what(), e.what() + strlen(e.what()));
+        if (result.error.empty()) {
+            result.error = std::wstring(e.what(), e.what() + strlen(e.what()));
+        }
     }
-    
-    CloseHandle(hInput);
-    CloseHandle(hOutput);
-    
+
+    if (hInput != INVALID_HANDLE_VALUE) CloseHandle(hInput);
+
     if (!result.success) {
         DeleteFileW(outputPath.c_str());
     }
-    
+
     return result;
 }
 
