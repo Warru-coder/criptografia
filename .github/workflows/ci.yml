@@ -132,7 +132,7 @@ jobs:
         with:
           name: securecrypt-win-x64
           path: release/
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: release/securecrypt.exe
           generate_release_notes: true
