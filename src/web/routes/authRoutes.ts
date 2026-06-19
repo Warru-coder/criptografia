@@ -1,7 +1,7 @@
 import express from 'express';
-import { createSession, deleteSession, SESSION_TTL_MS } from '../session/sessionStore';
-import { setupMasterPassword, verifyMasterPassword, getMasterKey } from '../../passwordManager/secureStorage';
-import { createUser, findUserByUsername, updateLastLogin } from '../../database/userRepository';
+import { createSession, deleteSession, deleteUserSessions, getSession, SESSION_TTL_MS } from '../session/sessionStore';
+import { setupMasterPassword, verifyMasterPassword, getMasterKey, changeMasterPassword } from '../../passwordManager/secureStorage';
+import { createUser, findUserByUsername, updateLastLogin, setWrappedKey } from '../../database/userRepository';
 import { validatePassword } from '../../passwordManager/passwordValidator';
 import { deriveKeyForStorage } from '../../crypto/cryptoUtils';
 import { env } from '../../config';
@@ -122,6 +122,63 @@ router.post('/logout', (req, res) => {
   const token = extractToken(req);
   if (token) deleteSession(token);
   res.json({ success: true });
+});
+
+// MED-04 / ADR-0014: POST /api/auth/change-password
+//   body: { currentPassword, newPassword }
+//   requires: valid Bearer session matching the user whose password is changing.
+//   effects:
+//     1. Re-derive vault hash + masterSalt.
+//     2. Invalidate ALL sessions for the user except the current one.
+//     3. Discard the cached wrappedKey (force passkey re-link).
+router.post('/change-password', async (req, res) => {
+  try {
+    const token = extractToken(req);
+    if (!token) { res.status(401).json({ error: 'Authentication required.' }); return; }
+    const session = getSession(token);
+    if (!session) { res.status(401).json({ error: 'Session expired.' }); return; }
+
+    const { currentPassword, newPassword } = req.body ?? {};
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      res.status(400).json({ error: 'currentPassword and newPassword are required.' });
+      return;
+    }
+
+    const validation = validatePassword(newPassword);
+    if (!validation.isValid) {
+      res.status(400).json({ errors: validation.errors });
+      return;
+    }
+
+    // Re-derive vault & masterKey atomically.
+    const newMasterKey = await changeMasterPassword(session.userId, currentPassword, newPassword);
+
+    // Invalidate all sessions for this user (DB + memory) — both the new and
+    // the current one. We then create a fresh session bound to the new key.
+    deleteUserSessions(session.userId);
+
+    // Drop wrappedKey: passkey users must re-link with new masterKey.
+    setWrappedKey(session.userId, '');
+
+    const newToken = createSession(newMasterKey, session.userId);
+    newMasterKey.fill(0);
+
+    logger.info(`Password changed for user ${session.userId}; sessions rotated.`);
+    res.json({
+      sessionToken: newToken,
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+      userId: session.userId,
+      passkeyResetRequired: true,
+    });
+  } catch (error) {
+    const msg = (error as Error).message ?? 'Internal error';
+    if (msg.includes('Current password is incorrect')) {
+      res.status(401).json({ error: msg });
+      return;
+    }
+    logger.error(`Change password failed: ${msg}`);
+    res.status(500).json({ error: 'Internal error during password change.' });
+  }
 });
 
 export { router as authRoutes };
