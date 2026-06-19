@@ -15,6 +15,7 @@ Cerrar las dos tareas de Fase 4 que pueden verificarse end-to-end en el entorno 
 |---|-------|--------|-----------|--------|
 | 4.A | Migración `vitest@2.1.8` → `vitest@4.1.9` + `@vitest/coverage-v8@4` | ADR-0007 (Fase 0) | [ADR-0017](../docs/decisions/0017-vitest-4-migration.md) | ✅ |
 | 4.E | Test e2e SSE multi-usuario (aislamiento por userId) | ADR-0013 verificación pendiente | `tests/integration/sseIsolation.test.ts` | ✅ |
+| 4.C | Cookie HttpOnly + CSRF dual-mode | ALTA-05 | [ADR-0016](../docs/decisions/0016-cookie-session-plan.md), [02_cookie_csrf_dual_mode.md](02_cookie_csrf_dual_mode.md) | ✅ |
 
 ## Resultado
 
@@ -22,7 +23,7 @@ Cerrar las dos tareas de Fase 4 que pueden verificarse end-to-end en el entorno 
 |---------|-------|---------|
 | `npm audit` total | 7 (1L / 3M / 1H / 2C) | 2 low (solo `@yao-pkg/pkg` → esbuild offline) |
 | `npm audit --omit=dev` | 0 | 0 |
-| Suite tests | 77/77 | 85/85 |
+| Suite tests | 77/77 | 92/92 |
 | Verificación ADR-0013 | `[ ]` pendiente | `[x]` cumplida |
 
 ## Test SSE multi-usuario
@@ -37,7 +38,6 @@ Cerrar las dos tareas de Fase 4 que pueden verificarse end-to-end en el entorno 
 Acordado con el usuario dejarlos para una iteración futura:
 
 - **4.B** WebAuthn PRF cliente (`public/js/app.js`) — requiere browser con autenticador PRF real para verificar. Server-side scaffolding ya entregado en Fase 3.
-- **4.C** Cookie HttpOnly + CSRF dual-mode — refactor grande de endpoints y tests. Plan en ADR-0016.
 - **4.D** Verificación build C++ con `apps/windows/build.bat` — manual, fuera del entorno CLI.
 
 ## Estado final del proyecto
@@ -48,5 +48,6 @@ Fase 1 (CRIT-01..05)          ✅ phase-1-source-complete
 Fase 2 (hardening crypto)     ✅ phase-2-complete
 Fase 3 (arquitectura)         ✅ phase-3-complete
 Fase 4 acotada (4.A + 4.E)    ✅ phase-4-partial-complete
-Fase 4 restante (4.B/C/D)     🟡 plan publicado, ejecución diferida
+Fase 4.C (cookie+CSRF dual)   ✅ phase-4-cookie-csrf-complete
+Fase 4 restante (4.B + 4.D)   🟡 requiere browser real / toolchain MSVC
 ```

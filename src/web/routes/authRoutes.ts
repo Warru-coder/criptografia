@@ -6,13 +6,41 @@ import { validatePassword } from '../../passwordManager/passwordValidator';
 import { deriveKeyForStorage } from '../../crypto/cryptoUtils';
 import { env } from '../../config';
 import { logger } from '../../utils/logger';
+import {
+  setSessionCookies,
+  clearSessionCookies,
+  generateCsrfToken,
+  readSessionTokenFromCookie,
+} from '../session/cookieSession';
+import { requireCsrf } from '../middleware/requireCsrf';
 
 const router = express.Router();
 
+// Dual-mode token extraction: cookie first, Bearer fallback. See ADR-0016.
 function extractToken(req: express.Request): string | undefined {
+  const fromCookie = readSessionTokenFromCookie(req);
+  if (fromCookie) return fromCookie;
   const h = req.headers.authorization;
   if (h?.startsWith('Bearer ')) return h.slice(7);
   return undefined;
+}
+
+function issueSessionResponse(
+  res: express.Response,
+  userId: string,
+  token: string,
+  status: number,
+  extra: Record<string, unknown> = {},
+): void {
+  const csrfToken = generateCsrfToken();
+  setSessionCookies(res, token, csrfToken);
+  res.status(status).json({
+    sessionToken: token,
+    csrfToken,
+    expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+    userId,
+    ...extra,
+  });
 }
 
 // POST /api/auth/register
@@ -48,14 +76,11 @@ router.post('/register', async (req, res) => {
       return;
     }
 
-    // Derive credential hash for DB (separate from vault KDF)
     const { hash, salt } = await deriveKeyForStorage(password);
     const user = createUser(trimmed, hash, salt.toString('base64'));
 
-    // Create per-user vault (stores Argon2id hash for key derivation)
     await setupMasterPassword(user.id, password);
 
-    // Log in immediately after registration
     const masterKey = await getMasterKey(user.id, password);
     const token = createSession(masterKey, user.id);
     masterKey.fill(0);
@@ -63,11 +88,7 @@ router.post('/register', async (req, res) => {
     updateLastLogin(user.id);
     logger.info(`User registered and logged in: ${trimmed}`);
 
-    res.status(201).json({
-      sessionToken: token,
-      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-      userId: user.id,
-    });
+    issueSessionResponse(res, user.id, token, 201);
   } catch (error) {
     logger.error(`Register failed: ${(error as Error).message}`);
     res.status(500).json({ error: (error as Error).message });
@@ -91,7 +112,6 @@ router.post('/login', async (req, res) => {
     const trimmed = username.trim().toLowerCase();
     const user = findUserByUsername(trimmed);
 
-    // Constant-time: always run verify even if user not found, to prevent timing attacks
     const isValid = user ? await verifyMasterPassword(user.id, password) : false;
 
     if (!user || !isValid) {
@@ -106,11 +126,7 @@ router.post('/login', async (req, res) => {
     updateLastLogin(user.id);
     logger.info(`User logged in: ${trimmed}`);
 
-    res.json({
-      sessionToken: token,
-      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-      userId: user.id,
-    });
+    issueSessionResponse(res, user.id, token, 200);
   } catch (error) {
     logger.error(`Login failed: ${(error as Error).message}`);
     res.status(500).json({ error: (error as Error).message });
@@ -121,17 +137,13 @@ router.post('/login', async (req, res) => {
 router.post('/logout', (req, res) => {
   const token = extractToken(req);
   if (token) deleteSession(token);
+  clearSessionCookies(res);
   res.json({ success: true });
 });
 
 // MED-04 / ADR-0014: POST /api/auth/change-password
-//   body: { currentPassword, newPassword }
-//   requires: valid Bearer session matching the user whose password is changing.
-//   effects:
-//     1. Re-derive vault hash + masterSalt.
-//     2. Invalidate ALL sessions for the user except the current one.
-//     3. Discard the cached wrappedKey (force passkey re-link).
-router.post('/change-password', async (req, res) => {
+// CSRF required when authenticated via cookie (no-op for Bearer callers).
+router.post('/change-password', requireCsrf, async (req, res) => {
   try {
     const token = extractToken(req);
     if (!token) { res.status(401).json({ error: 'Authentication required.' }); return; }
@@ -150,26 +162,16 @@ router.post('/change-password', async (req, res) => {
       return;
     }
 
-    // Re-derive vault & masterKey atomically.
     const newMasterKey = await changeMasterPassword(session.userId, currentPassword, newPassword);
 
-    // Invalidate all sessions for this user (DB + memory) — both the new and
-    // the current one. We then create a fresh session bound to the new key.
     deleteUserSessions(session.userId);
-
-    // Drop wrappedKey: passkey users must re-link with new masterKey.
     setWrappedKey(session.userId, '');
 
     const newToken = createSession(newMasterKey, session.userId);
     newMasterKey.fill(0);
 
     logger.info(`Password changed for user ${session.userId}; sessions rotated.`);
-    res.json({
-      sessionToken: newToken,
-      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-      userId: session.userId,
-      passkeyResetRequired: true,
-    });
+    issueSessionResponse(res, session.userId, newToken, 200, { passkeyResetRequired: true });
   } catch (error) {
     const msg = (error as Error).message ?? 'Internal error';
     if (msg.includes('Current password is incorrect')) {

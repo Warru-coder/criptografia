@@ -12,6 +12,7 @@ import { webauthnRoutes } from './routes/webauthnRoutes';
 import { aiRoutes } from './routes/aiRoutes';
 import { pageRoutes } from './routes/pageRoutes';
 import { errorMiddleware } from './middleware/errorMiddleware';
+import { requireCsrf } from './middleware/requireCsrf';
 import { env } from '../config';
 import { logger } from '../utils/logger';
 
@@ -86,10 +87,14 @@ export function createServer(): express.Application {
   app.use(express.static(path.join(__dirname, '..', '..', 'public')));
 
   app.use('/', pageRoutes);
+  // ADR-0016 / Fase 4.C: CSRF double-submit on cookie-authenticated mutating requests.
+  // /api/auth/* (login, register, logout) and /api/auth/webauthn/* are exempt because
+  // they either have no session yet or use their own challenge mechanism. The
+  // middleware also no-ops for Bearer-authenticated callers (legacy / programmatic).
   app.use('/api/auth', authRoutes);
   if (env.enableWebAuthn) app.use('/api/auth/webauthn', webauthnRoutes);
-  if (env.enableAi) app.use('/api/ai', aiRoutes);
-  app.use('/api', apiRoutes);
+  if (env.enableAi) app.use('/api/ai', requireCsrf, aiRoutes);
+  app.use('/api', requireCsrf, apiRoutes);
 
   app.use(errorMiddleware);
 

@@ -19,6 +19,7 @@ import {
   updateCounter,
 } from '../../database/webauthnRepository';
 import { createSession, SESSION_TTL_MS, getSession } from '../session/sessionStore';
+import { setSessionCookies, generateCsrfToken, readSessionTokenFromCookie } from '../session/cookieSession';
 import { logger } from '../../utils/logger';
 
 const router = express.Router();
@@ -28,6 +29,8 @@ const pendingRegistration = new Map<string, string>();
 const pendingAuthentication = new Map<string, string>();
 
 function extractToken(req: express.Request): string | undefined {
+  const fromCookie = readSessionTokenFromCookie(req);
+  if (fromCookie) return fromCookie;
   const h = req.headers.authorization;
   if (h?.startsWith('Bearer ')) return h.slice(7);
   return undefined;
@@ -266,8 +269,12 @@ router.post('/authentication-verify', async (req, res) => {
     updateLastLogin(user.id);
     logger.info(`WebAuthn login for user: ${user.username}`);
 
+    // ADR-0016 / Fase 4.C: emit session cookie + CSRF token for dual-mode auth.
+    const csrfToken = generateCsrfToken();
+    setSessionCookies(res, token, csrfToken);
     res.json({
       sessionToken: token,
+      csrfToken,
       expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
       userId: user.id,
     });

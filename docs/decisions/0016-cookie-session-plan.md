@@ -1,7 +1,7 @@
-# ADR-0016: Plan de migración Bearer → Cookie HttpOnly + CSRF
+# ADR-0016: Migración Bearer → Cookie HttpOnly + CSRF (dual-mode)
 
-- **Estado:** Aceptado (plan); implementación en Fase 4 polish
-- **Fecha:** 2026-06-18
+- **Estado:** Implementado en modo dual (Fase 4.C, 2026-06-19); Bearer sigue aceptado como fallback legacy
+- **Fecha:** 2026-06-18 (plan), 2026-06-19 (implementación)
 
 ## Contexto
 
@@ -37,11 +37,22 @@ Migrar a cookies HttpOnly + CSRF doble-submit token:
 5. Frontend prefiere cookie; tests se migran progresivamente.
 6. Tras 1 release con dual-mode: Bearer pasa a deprecated; otro release y se elimina.
 
-## Verificación (cuando se implemente)
+## Verificación
 
-- [ ] Tests integration con cookie jar (supertest agent).
-- [ ] Test CSRF: petición sin cabecera X-CSRF-Token → 403.
-- [ ] Test SameSite: simulación de origin cruzado → cookie no se envía.
+- [x] Tests integration con cookie jar (`tests/integration/cookieAuth.test.ts`, supertest agent).
+- [x] Test CSRF: petición POST con cookie pero sin `X-CSRF-Token` → 403.
+- [x] Test CSRF: petición POST con `X-CSRF-Token` incorrecto → 403.
+- [x] Test compat: Bearer sin CSRF sigue funcionando (legacy clientes).
+- [x] Test logout: borra ambas cookies (`sc_session=;` y `sc_csrf=;`).
+- [x] Test GET no requiere CSRF.
+- [ ] Test SameSite real cross-origin: requiere navegador, fuera del alcance del harness Node.
+
+## Notas de implementación
+
+- En `NODE_ENV=production` se usa el prefijo `__Host-` con `Secure`. En test/dev el prefijo y el flag `Secure` se omiten para permitir el harness sobre HTTP plano (`src/web/session/cookieSession.ts`).
+- `requireCsrf` es no-op para callers Bearer: un atacante CSRF no puede setear `Authorization` desde un origen ajeno, así que la cabecera Bearer no es vector. Esto preserva clientes programáticos durante el modo dual.
+- Excepciones explícitas: `/api/auth/login`, `/api/auth/register`, `/api/auth/logout`, `/api/auth/webauthn/*`. Todo lo demás bajo `/api/*` pasa por `requireCsrf`.
+- `/api/auth/change-password` aplica `requireCsrf` inline porque su prefijo `/api/auth` está exento por defecto pero esta ruta sí debe protegerse.
 
 ## Referencias
 

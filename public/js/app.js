@@ -49,6 +49,7 @@ const aiTabBtns = document.querySelectorAll('.ai-tab-btn');
 
 // State
 let sessionToken = null;
+let csrfToken = null;
 let currentUserId = null;
 let currentUsername = null;
 let eventSource = null;
@@ -92,12 +93,18 @@ window.addEventListener('resize', () => { columns = Math.floor(canvas.width / fo
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
+// ADR-0016: dual-mode auth — cookie HttpOnly (primary) + Bearer (legacy fallback).
+// Cookies are sent automatically by the browser; we add the CSRF header on mutating calls.
 function authHeaders(extra = {}) {
-  return { 'Authorization': `Bearer ${sessionToken}`, ...extra };
+  const h = { ...extra };
+  if (sessionToken) h['Authorization'] = `Bearer ${sessionToken}`;
+  if (csrfToken) h['X-CSRF-Token'] = csrfToken;
+  return h;
 }
 
 function handleUnauthorized() {
   sessionToken = null;
+  csrfToken = null;
   currentUserId = null;
   currentUsername = null;
   mainPanel.classList.add('hidden');
@@ -106,7 +113,8 @@ function handleUnauthorized() {
 }
 
 async function apiFetch(url, options = {}) {
-  if (sessionToken && !(options.headers && options.headers['Authorization'])) {
+  options.credentials = 'same-origin';
+  if ((sessionToken || csrfToken) && !(options.headers && options.headers['Authorization'])) {
     options.headers = { ...options.headers, ...authHeaders() };
   }
   const res = await fetch(url, options);
@@ -143,6 +151,7 @@ function showLoginOrRegister() {
 
 function onSessionEstablished(data, username) {
   sessionToken = data.sessionToken;
+  csrfToken = data.csrfToken || null;
   currentUserId = data.userId;
   currentUsername = username;
   registerPanel.classList.add('hidden');
@@ -232,7 +241,7 @@ logoutBtn.addEventListener('click', async () => {
   if (sessionToken) {
     try { await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }); } catch { /* ignore */ }
   }
-  sessionToken = null; currentUserId = null; currentUsername = null;
+  sessionToken = null; csrfToken = null; currentUserId = null; currentUsername = null;
   mainPanel.classList.add('hidden');
   if (eventSource) { eventSource.close(); eventSource = null; }
   addLog('Vault locked — session terminated', 'info');
